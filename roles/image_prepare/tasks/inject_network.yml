@@ -1,0 +1,35 @@
+---
+- name: Create network config directory
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: netcfg_
+  register: netcfg_dir
+
+- name: Generate network config for {{ vm.name }}
+  ansible.builtin.copy:
+    dest: "{{ netcfg_dir.path }}/ifcfg-eth0"
+    content: |
+      TYPE=Ethernet
+      DEVICE=eth0
+      ONBOOT=yes
+      BOOTPROTO=static
+      IPADDR={{ vm.ip }}
+      NETMASK={{ baremetal_net.netmask }}
+      GATEWAY={{ baremetal_net.gateway }}
+      DNS1={{ (cluster_nodes | selectattr('role', 'eq', 'utility') | first).ip }}
+      DOMAIN={{ domain }}
+      MTU={{ baremetal_net.mtu }}
+    mode: "0644"
+
+- name: Inject network config into {{ vm.name }} image
+  ansible.builtin.command:
+    cmd: >-
+      virt-copy-in -a {{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2
+      {{ netcfg_dir.path }}/ifcfg-eth0
+      /etc/sysconfig/network-scripts/
+  changed_when: true
+
+- name: Cleanup temp directory
+  ansible.builtin.file:
+    path: "{{ netcfg_dir.path }}"
+    state: absent

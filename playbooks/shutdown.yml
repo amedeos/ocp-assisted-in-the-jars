@@ -1,0 +1,41 @@
+---
+- name: Gracefully shut down all VMs
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Shut down control-plane VMs
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        state: shutdown
+      loop: "{{ controlplane_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      failed_when: false
+
+    - name: Wait for control-plane VMs to stop
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        command: status
+      register: cp_status
+      until: cp_status.status == 'shutdown' or cp_status.status == 'shutoff'
+      retries: 30
+      delay: 10
+      loop: "{{ controlplane_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      failed_when: false
+
+    - name: Shut down ceph VM
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        state: shutdown
+      loop: "{{ ceph_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      failed_when: false
+
+    - name: Shut down utility VM
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        state: shutdown
+      loop: "{{ utility_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      failed_when: false

@@ -1,0 +1,64 @@
+---
+- name: Copy golden image for ceph VM
+  ansible.builtin.copy:
+    src: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/{{ supported_os }}-ceph.qcow2"
+    dest: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/ceph.qcow2"
+    remote_src: true
+    force: false
+    mode: "0644"
+  loop: "{{ ceph_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+
+- name: Create OSD disks for ceph VM
+  ansible.builtin.command:
+    cmd: >-
+      qemu-img create -f qcow2
+      {{ hostvars[item.0.hypervisor].image_dir | default(image_dir) }}/{{ item.0.name }}-osd-{{ idx + 1 }}.qcow2
+      {{ item.1.size_gb }}G
+    creates: "{{ hostvars[item.0.hypervisor].image_dir | default(image_dir) }}/{{ item.0.name }}-osd-{{ idx + 1 }}.qcow2"
+  loop: "{{ ceph_nodes | product(vm_specs.ceph.osd_disks) | list }}"
+  loop_control:
+    index_var: idx
+  delegate_to: "{{ item.0.hypervisor }}"
+  changed_when: true
+
+- name: Generate libvirt XML for ceph VM
+  ansible.builtin.template:
+    src: vm-domain.xml.j2
+    dest: "/tmp/{{ item.name }}.xml"
+    mode: "0600"
+  vars:
+    vm_name: "{{ item.name }}"
+    vm_cpu: "{{ vm_specs.ceph.cpu }}"
+    vm_memory_mb: "{{ vm_specs.ceph.memory_mb }}"
+    vm_cpu_mode: "host-model"
+    vm_mac: "{{ item.mac }}"
+    vm_image_dir: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}"
+    vm_osd_disks: "{{ vm_specs.ceph.osd_disks }}"
+    vm_boot_cdrom: false
+  loop: "{{ ceph_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+
+- name: Define ceph VM in libvirt
+  ansible.builtin.command:
+    cmd: "virsh define /tmp/{{ item.name }}.xml"
+  register: virsh_define_ceph
+  changed_when: "'defined' in virsh_define_ceph.stdout"
+  failed_when: virsh_define_ceph.rc != 0 and 'already exists' not in virsh_define_ceph.stderr
+  loop: "{{ ceph_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+
+- name: Start ceph VM
+  community.libvirt.virt:
+    name: "{{ item.name }}"
+    state: running
+  loop: "{{ ceph_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+
+- name: Wait for ceph VM to be reachable via SSH
+  ansible.builtin.wait_for:
+    host: "{{ item.ip }}"
+    port: 22
+    delay: 10
+    timeout: 300
+  loop: "{{ ceph_nodes }}"

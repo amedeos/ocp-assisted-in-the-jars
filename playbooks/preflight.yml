@@ -1,0 +1,160 @@
+---
+- name: Pre-flight validation (read-only)
+  hosts: hypervisors
+  become: true
+  gather_facts: true
+  tasks:
+    # ---- KVM and libvirt ----
+    - name: Check KVM modules are loaded
+      ansible.builtin.command: lsmod
+      register: lsmod_output
+      changed_when: false
+
+    - name: Verify KVM module is present
+      ansible.builtin.assert:
+        that: "'kvm_intel' in lsmod_output.stdout or 'kvm_amd' in lsmod_output.stdout"
+        fail_msg: "KVM kernel module not loaded. Enable Intel VT-x/AMD-V in BIOS."
+
+    - name: Check libvirtd is running
+      ansible.builtin.command: systemctl is-active libvirtd
+      register: libvirtd_status
+      changed_when: false
+      failed_when: false
+
+    - name: Verify libvirtd is active
+      ansible.builtin.assert:
+        that: libvirtd_status.stdout == 'active'
+        fail_msg: "libvirtd is not running. Start it with: systemctl start libvirtd"
+
+    # ---- Network ----
+    - name: Check bridge exists
+      ansible.builtin.command: "ip link show {{ bridge_bm }}"
+      register: bridge_check
+      changed_when: false
+      failed_when: false
+
+    - name: Verify bridge is present
+      ansible.builtin.assert:
+        that: bridge_check.rc == 0
+        fail_msg: >-
+          Bridge '{{ bridge_bm }}' not found. Create it manually on the hypervisor
+          before running the deployment.
+
+    - name: Check IP forwarding
+      ansible.builtin.command: sysctl -n net.ipv4.ip_forward
+      register: ip_forward
+      changed_when: false
+
+    - name: Verify IP forwarding is enabled
+      ansible.builtin.assert:
+        that: ip_forward.stdout | trim == '1'
+        fail_msg: "IP forwarding is disabled. Enable with: sysctl -w net.ipv4.ip_forward=1"
+
+    # ---- Nested virtualization ----
+    - name: Check nested virtualization (Intel)
+      ansible.builtin.command: cat /sys/module/kvm_intel/parameters/nested
+      register: nested_intel
+      changed_when: false
+      failed_when: false
+
+    - name: Check nested virtualization (AMD)
+      ansible.builtin.command: cat /sys/module/kvm_amd/parameters/nested
+      register: nested_amd
+      changed_when: false
+      failed_when: false
+
+    - name: Verify nested virtualization is enabled
+      ansible.builtin.assert:
+        that: >-
+          (nested_intel.stdout | default('') | trim) in ['1', 'Y'] or
+          (nested_amd.stdout | default('') | trim) in ['1', 'Y']
+        fail_msg: "Nested virtualization is not enabled. Configure /etc/modprobe.d/kvm.conf and reload the module."
+
+    # ---- Disk space ----
+    - name: Check available disk space in image directory
+      ansible.builtin.command: "df -BG --output=avail {{ image_dir }}"
+      register: disk_space
+      changed_when: false
+
+    - name: Parse available disk space
+      ansible.builtin.set_fact:
+        available_disk_gb: "{{ disk_space.stdout_lines[-1] | regex_replace('[^0-9]', '') | int }}"
+
+    - name: Verify sufficient disk space (minimum 500G)
+      ansible.builtin.assert:
+        that: available_disk_gb | int >= 500
+        fail_msg: >-
+          Insufficient disk space in {{ image_dir }}.
+          Available: {{ available_disk_gb }}G, Required: >= 500G
+
+    # ---- RAM ----
+    - name: Get total RAM
+      ansible.builtin.set_fact:
+        total_ram_mb: "{{ ansible_memtotal_mb }}"
+
+    - name: Calculate required RAM for VMs on this hypervisor
+      ansible.builtin.set_fact:
+        required_ram_mb: >-
+          {{ cluster_nodes
+            | selectattr('hypervisor', 'eq', inventory_hostname)
+            | map(attribute='role')
+            | map('regex_replace', '^utility$', vm_specs.utility.memory_mb | string)
+            | map('regex_replace', '^ceph$', vm_specs.ceph.memory_mb | string)
+            | map('regex_replace', '^control-plane$', vm_specs.controlplane.memory_mb | string)
+            | map('int')
+            | sum }}
+
+    - name: Verify sufficient RAM
+      ansible.builtin.assert:
+        that: total_ram_mb | int >= required_ram_mb | int
+        fail_msg: >-
+          Insufficient RAM on {{ inventory_hostname }}.
+          Available: {{ total_ram_mb }}MB, Required: {{ required_ram_mb }}MB
+
+    # ---- Base image ----
+    - name: Check RHEL base image exists
+      ansible.builtin.stat:
+        path: "{{ image_location }}"
+      register: image_stat
+
+    - name: Verify base image is present
+      ansible.builtin.assert:
+        that: image_stat.stat.exists
+        fail_msg: >-
+          RHEL base image not found at {{ image_location }}.
+          Download from access.redhat.com and place it there.
+
+    # ---- Pull secret ----
+    - name: Check pull secret file exists
+      ansible.builtin.stat:
+        path: "{{ pull_secret_file }}"
+      register: pull_secret_stat
+      delegate_to: localhost
+
+    - name: Verify pull secret is present
+      ansible.builtin.assert:
+        that: pull_secret_stat.stat.exists
+        fail_msg: >-
+          Pull secret not found at {{ pull_secret_file }}.
+          Download from console.redhat.com and place it there.
+      run_once: true
+
+    - name: Validate pull secret is valid JSON
+      ansible.builtin.command: "python3 -m json.tool {{ pull_secret_file }}"
+      delegate_to: localhost
+      changed_when: false
+      run_once: true
+
+    # ---- Summary ----
+    - name: Pre-flight checks passed
+      ansible.builtin.debug:
+        msg:
+          - "All pre-flight checks passed on {{ inventory_hostname }}"
+          - "  KVM: OK"
+          - "  libvirtd: OK"
+          - "  Bridge {{ bridge_bm }}: OK"
+          - "  IP forwarding: OK"
+          - "  Nested virt: OK"
+          - "  Disk space: {{ available_disk_gb }}G available"
+          - "  RAM: {{ total_ram_mb }}MB available ({{ required_ram_mb }}MB required)"
+          - "  Base image: OK"

@@ -1,0 +1,7 @@
+---
+- name: Create SSH key pair
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: ssh_key
+      tags: [ssh-key]

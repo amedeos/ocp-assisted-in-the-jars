@@ -1,0 +1,8 @@
+---
+- name: Create all VMs
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  roles:
+    - role: vm_create
+      tags: [create-vms]

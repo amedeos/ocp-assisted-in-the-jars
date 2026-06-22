@@ -1,0 +1,3 @@
+---
+dnsmasq_upstream_dns: "{{ dns_forwarder }}"
+dnsmasq_lease_time: infinite

@@ -1,0 +1,40 @@
+---
+- name: Register RHEL subscription
+  community.general.redhat_subscription:
+    username: "{{ rh_subscription_user }}"
+    password: "{{ rh_subscription_password }}"
+    pool_ids: "{{ rh_subscription_pool }}"
+    state: present
+  no_log: true
+
+- name: Install dnsmasq
+  ansible.builtin.dnf:
+    name:
+      - dnsmasq
+      - dnsmasq-utils
+    state: present
+
+- name: Deploy dnsmasq configuration
+  ansible.builtin.template:
+    src: dnsmasq.conf.j2
+    dest: /etc/dnsmasq.conf
+    mode: "0644"
+    backup: true
+  notify: restart_dnsmasq
+
+- name: Enable and start dnsmasq
+  ansible.builtin.systemd:
+    name: dnsmasq
+    enabled: true
+    state: started
+
+- name: Open DNS and DHCP ports in firewall
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop:
+    - dns
+    - dhcp
+  failed_when: false

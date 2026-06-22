@@ -1,0 +1,6 @@
+---
+- name: Configure nested virtualization
+  ansible.builtin.include_tasks: nested_virt.yml
+
+- name: Configure iptables NAT and port forwarding
+  ansible.builtin.include_tasks: iptables.yml

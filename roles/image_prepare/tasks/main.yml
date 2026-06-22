@@ -1,0 +1,59 @@
+---
+- name: Check if base image exists locally
+  ansible.builtin.stat:
+    path: "{{ image_location }}"
+  register: base_image_stat
+
+- name: Fail if base image not found
+  ansible.builtin.assert:
+    that: base_image_stat.stat.exists
+    fail_msg: >-
+      RHEL base image not found at {{ image_location }}.
+      Download it from access.redhat.com and place it there.
+
+- name: Copy base image to image directory
+  ansible.builtin.copy:
+    src: "{{ image_location }}"
+    dest: "{{ image_dir }}/{{ supported_os }}-base.qcow2"
+    remote_src: true
+    force: false
+    mode: "0644"
+
+- name: Prepare golden images for utility and ceph
+  ansible.builtin.include_tasks: prepare_single_image.yml
+  loop: "{{ image_prepare_vms }}"
+  loop_control:
+    loop_var: vm
+
+- name: Read SSH public key
+  ansible.builtin.slurp:
+    src: "{{ ssh_key_public }}"
+  register: ssh_pub_content
+  delegate_to: localhost
+
+- name: Customize golden images
+  block:
+    - name: Customize image for {{ vm.name }}
+      ansible.builtin.command:
+        cmd: >-
+          virt-customize -a {{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2
+          --root-password password:"{{ secure_password }}"
+          --ssh-inject "root:string:{{ ssh_pub_content.content | b64decode | trim }}"
+          --selinux-relabel
+          --run-command 'dnf remove cloud-init* -y || true'
+      loop: "{{ image_prepare_vms }}"
+      loop_control:
+        loop_var: vm
+      changed_when: true
+      no_log: true
+
+  rescue:
+    - name: Image customization failed
+      ansible.builtin.fail:
+        msg: "virt-customize failed. Check that libguestfs-tools is installed."
+
+- name: Inject network configuration for {{ vm.name }}
+  ansible.builtin.include_tasks: inject_network.yml
+  loop: "{{ image_prepare_vms }}"
+  loop_control:
+    loop_var: vm

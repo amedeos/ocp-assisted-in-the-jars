@@ -1,0 +1,74 @@
+<domain type='kvm'>
+  <name>{{ vm_name }}</name>
+  <memory unit='MiB'>{{ vm_memory_mb }}</memory>
+  <vcpu>{{ vm_cpu }}</vcpu>
+
+{% if vm_cpu_mode == 'host-passthrough' %}
+  <cpu mode='host-passthrough' check='none'/>
+{% else %}
+  <cpu mode='host-model' check='none'/>
+{% endif %}
+
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+{% if vm_boot_cdrom | default(false) | bool %}
+    <boot dev='cdrom'/>
+    <boot dev='hd'/>
+{% else %}
+    <boot dev='hd'/>
+{% endif %}
+  </os>
+
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+
+  <devices>
+    <!-- OS disk -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='{{ vm_image_dir }}/{{ vm_name }}.qcow2'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+
+{% for osd in vm_osd_disks | default([]) %}
+    <!-- OSD disk {{ loop.index }} -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='{{ vm_image_dir }}/{{ vm_name }}-osd-{{ loop.index }}.qcow2'/>
+      <target dev='{{ osd.device }}' bus='virtio'/>
+    </disk>
+{% endfor %}
+
+{% if vm_boot_cdrom | default(false) | bool %}
+    <!-- DVD/cdrom for discovery ISO -->
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{ assisted.discovery_iso_path }}'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+    </disk>
+{% endif %}
+
+    <!-- Network interface on baremetal bridge -->
+    <interface type='bridge'>
+      <source bridge='{{ bridge_bm }}'/>
+      <mac address='{{ vm_mac }}'/>
+      <model type='virtio'/>
+    </interface>
+
+    <serial type='pty'>
+      <target port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+
+    <graphics type='vnc' port='-1' autoport='yes' listen='0.0.0.0'/>
+
+    <channel type='unix'>
+      <target type='virtio' name='org.qemu.guest_agent.0'/>
+    </channel>
+  </devices>
+</domain>

@@ -1,0 +1,42 @@
+---
+- name: Start all VMs in correct order
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Start utility VM
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        state: running
+      loop: "{{ utility_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+
+    - name: Wait for utility VM
+      ansible.builtin.wait_for:
+        host: "{{ item.ip }}"
+        port: 22
+        delay: 5
+        timeout: 120
+      loop: "{{ utility_nodes }}"
+
+    - name: Start ceph VM
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        state: running
+      loop: "{{ ceph_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+
+    - name: Wait for ceph VM
+      ansible.builtin.wait_for:
+        host: "{{ item.ip }}"
+        port: 22
+        delay: 5
+        timeout: 120
+      loop: "{{ ceph_nodes }}"
+
+    - name: Start control-plane VMs
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        state: running
+      loop: "{{ controlplane_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"

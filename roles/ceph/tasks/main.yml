@@ -1,0 +1,9 @@
+---
+- name: Install cephadm
+  ansible.builtin.include_tasks: install_cephadm.yml
+
+- name: Bootstrap Ceph cluster
+  ansible.builtin.include_tasks: bootstrap.yml
+
+- name: Configure OSDs and storage pool
+  ansible.builtin.include_tasks: osd.yml

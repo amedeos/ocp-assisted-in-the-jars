@@ -1,0 +1,6 @@
+---
+ceph_osd_devices:
+  - /dev/vdb
+  - /dev/vdc
+  - /dev/vdd
+ceph_client_name: client.openshift

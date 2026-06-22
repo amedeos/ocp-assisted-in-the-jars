@@ -1,0 +1,9 @@
+---
+- name: Create utility VM
+  ansible.builtin.include_tasks: utility.yml
+
+- name: Create ceph VM
+  ansible.builtin.include_tasks: ceph.yml
+
+- name: Create control-plane VMs
+  ansible.builtin.include_tasks: control_planes.yml

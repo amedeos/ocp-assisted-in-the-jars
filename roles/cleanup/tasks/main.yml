@@ -1,0 +1,43 @@
+---
+- name: Destroy VMs
+  community.libvirt.virt:
+    name: "{{ item.name }}"
+    state: destroyed
+  loop: "{{ cluster_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+  failed_when: false
+
+- name: Undefine VMs
+  ansible.builtin.command:
+    cmd: "virsh undefine {{ item.name }} --remove-all-storage"
+  loop: "{{ cluster_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+  register: virsh_undefine
+  changed_when: "'has been undefined' in virsh_undefine.stdout"
+  failed_when: false
+
+- name: Remove OSD disks for ceph VM
+  ansible.builtin.file:
+    path: "{{ hostvars[item.0.hypervisor].image_dir | default(image_dir) }}/{{ item.0.name }}-osd-{{ idx + 1 }}.qcow2"
+    state: absent
+  loop: "{{ ceph_nodes | product(vm_specs.ceph.osd_disks) | list }}"
+  loop_control:
+    index_var: idx
+  delegate_to: "{{ item.0.hypervisor }}"
+
+- name: Remove golden images
+  ansible.builtin.file:
+    path: "{{ image_dir }}/{{ supported_os }}-{{ item }}.qcow2"
+    state: absent
+  loop:
+    - base
+    - utility
+    - ceph
+  when: cleanup_remove_images | bool
+
+- name: Remove temporary XML files
+  ansible.builtin.file:
+    path: "/tmp/{{ item.name }}.xml"
+    state: absent
+  loop: "{{ cluster_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"

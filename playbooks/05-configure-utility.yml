@@ -1,0 +1,8 @@
+---
+- name: Configure DNS and DHCP on utility VM
+  hosts: utility
+  become: true
+  gather_facts: true
+  roles:
+    - role: dnsmasq
+      tags: [configure-utility]

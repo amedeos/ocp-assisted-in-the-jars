@@ -1,0 +1,41 @@
+---
+- name: Boot control-plane VMs from discovery ISO
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify discovery ISO exists
+      ansible.builtin.stat:
+        path: "{{ assisted.discovery_iso_path }}"
+      register: iso_stat
+
+    - name: Fail if discovery ISO not found
+      ansible.builtin.assert:
+        that: iso_stat.stat.exists
+        fail_msg: >-
+          Discovery ISO not found at {{ assisted.discovery_iso_path }}.
+          Download it from console.redhat.com (Assisted Installer)
+          and place it at that path.
+
+    - name: Start control-plane VMs
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        state: running
+      loop: "{{ controlplane_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+
+    - name: Display next steps
+      ansible.builtin.debug:
+        msg:
+          - "Control-plane VMs are now booting from the discovery ISO."
+          - "Next steps:"
+          - "  1. Open console.redhat.com -> Assisted Installer"
+          - "  2. Wait for all 3 hosts to appear and be discovered"
+          - "  3. Configure the cluster (network, storage, etc.)"
+          - "  4. Start the installation"
+          - ""
+          - "To monitor VM consoles:"
+          - "  virsh console control-plane-0"
+          - "  virsh console control-plane-1"
+          - "  virsh console control-plane-2"
+      run_once: true

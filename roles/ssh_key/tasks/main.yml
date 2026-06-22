@@ -1,0 +1,13 @@
+---
+- name: Ensure SSH key directory exists
+  ansible.builtin.file:
+    path: "{{ ssh_key_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Generate SSH key pair
+  community.crypto.openssh_keypair:
+    path: "{{ ssh_key_private }}"
+    type: "{{ ssh_key_type }}"
+    size: "{{ ssh_key_size }}"
+    state: present

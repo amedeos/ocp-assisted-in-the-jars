@@ -1,0 +1,8 @@
+---
+image_prepare_vms:
+  - name: utility
+    disk_gb: "{{ vm_specs.utility.os_disk_gb }}"
+    ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'utility') | first).ip }}"
+  - name: ceph
+    disk_gb: "{{ vm_specs.ceph.os_disk_gb }}"
+    ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"

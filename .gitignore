@@ -1,0 +1,41 @@
+# Editor artifacts
+*.swp
+*.orig
+*.bak
+*~
+
+# SSH keys
+files/.ssh/id_rsa
+files/.ssh/id_rsa.pub
+
+# Secrets
+*.vault-pass*
+.vault-pass
+files/pull-secret.txt
+pull-secret.txt
+inventory/group_vars/all/vault.yml
+
+# Custom overrides (user-specific, not committed)
+inventory/group_vars/all/custom.yml
+inventory/group_vars/all/custom-*.yml
+
+# Ansible artifacts
+*.retry
+
+# Generated host files
+hosts-utility*
+hosts-ceph*
+
+# Temporary files
+*.temp
+*.tar.*
+*.iso
+
+# Ceph export (contains CephX keys)
+ceph-external-cluster-details*
+
+# Notes and scratch
+appunti*
+notes*
+*.PERSONAL
+*.ORIG

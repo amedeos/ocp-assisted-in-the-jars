@@ -1,0 +1,130 @@
+---
+# Cluster identity
+cluster_name: ocp-lab
+base_domain: example.com
+domain: "{{ cluster_name }}.{{ base_domain }}"
+
+# OpenShift version
+ocp_version: "4.22"
+
+# Base OS image (RHEL 10 for utility and ceph VMs)
+supported_os: rhel10
+image: rhel-10.2-x86_64-kvm.qcow2
+image_location: /root/images/rhel-10.2-x86_64-kvm.qcow2
+virt_os_variant: rhel10.2
+
+# Network - single baremetal network (bridge is a manual prerequisite)
+bridge_bm: bm
+
+baremetal_net:
+  net: 192.168.203.0
+  netmask: 255.255.255.0
+  prefix: 24
+  reverse: 203.168.192
+  gateway: 192.168.203.1
+  ntp: pool.ntp.org
+  dhcp_start: 192.168.203.90
+  dhcp_end: 192.168.203.110
+  mtu: 1500
+
+# Upstream DNS forwarder (used by dnsmasq on utility)
+dns_forwarder: 1.1.1.1
+
+# VIPs for OpenShift
+vip:
+  api: 192.168.203.80
+  api_last_octet: 80
+  ingress: 192.168.203.81
+  ingress_last_octet: 81
+
+# SSH key paths (relative to repo root)
+ssh_key_dir: files/.ssh
+ssh_key_private: "{{ ssh_key_dir }}/id_rsa"
+ssh_key_public: "{{ ssh_key_dir }}/id_rsa.pub"
+
+# Default image storage directory
+image_dir: /var/lib/libvirt/images
+
+# Pull secret file path
+pull_secret_file: files/pull-secret.txt
+
+# VM specifications
+vm_specs:
+  utility:
+    cpu: 2
+    memory_mb: 4096
+    os_disk_gb: 50
+  ceph:
+    cpu: 4
+    memory_mb: 16384
+    os_disk_gb: 50
+    osd_disks:
+      - size_gb: 200
+        device: vdb
+      - size_gb: 200
+        device: vdc
+      - size_gb: 200
+        device: vdd
+  controlplane:
+    cpu: 16
+    memory_mb: 65536
+    os_disk_gb: 120
+
+# Assisted Installer
+assisted:
+  mode: cloud
+  discovery_iso_path: "{{ image_dir }}/discovery-image.iso"
+
+# Ceph configuration
+ceph_config:
+  pool_name: openshift-pool
+  pg_num: 128
+  dashboard_enabled: false
+
+# Hypervisor settings
+hypervisor:
+  enable_nat: true
+  enable_portfw: true
+  wan_interface: eth0
+
+# ---- Node definitions ----
+# Each node specifies which hypervisor creates it.
+# Default: localhost (local execution, no SSH).
+# Override with custom vars for multi-hypervisor setups.
+
+cluster_nodes:
+  - name: utility
+    role: utility
+    hypervisor: localhost
+    ip: 192.168.203.254
+    ip_last_octet: 254
+    mac: "52:54:00:00:33:FE"
+  - name: ceph
+    role: ceph
+    hypervisor: localhost
+    ip: 192.168.203.252
+    ip_last_octet: 252
+    mac: "52:54:00:00:33:FC"
+  - name: control-plane-0
+    role: control-plane
+    hypervisor: localhost
+    ip: 192.168.203.53
+    ip_last_octet: 53
+    mac: "52:54:00:00:33:00"
+  - name: control-plane-1
+    role: control-plane
+    hypervisor: localhost
+    ip: 192.168.203.54
+    ip_last_octet: 54
+    mac: "52:54:00:00:33:01"
+  - name: control-plane-2
+    role: control-plane
+    hypervisor: localhost
+    ip: 192.168.203.55
+    ip_last_octet: 55
+    mac: "52:54:00:00:33:02"
+
+# Derived lists (computed from cluster_nodes)
+utility_nodes: "{{ cluster_nodes | selectattr('role', 'eq', 'utility') | list }}"
+ceph_nodes: "{{ cluster_nodes | selectattr('role', 'eq', 'ceph') | list }}"
+controlplane_nodes: "{{ cluster_nodes | selectattr('role', 'eq', 'control-plane') | list }}"

@@ -1,0 +1,51 @@
+---
+- name: Copy golden image for utility VM
+  ansible.builtin.copy:
+    src: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/{{ supported_os }}-utility.qcow2"
+    dest: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/utility.qcow2"
+    remote_src: true
+    force: false
+    mode: "0644"
+  loop: "{{ utility_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+
+- name: Generate libvirt XML for utility VM
+  ansible.builtin.template:
+    src: vm-domain.xml.j2
+    dest: "/tmp/{{ item.name }}.xml"
+    mode: "0600"
+  vars:
+    vm_name: "{{ item.name }}"
+    vm_cpu: "{{ vm_specs.utility.cpu }}"
+    vm_memory_mb: "{{ vm_specs.utility.memory_mb }}"
+    vm_cpu_mode: "host-model"
+    vm_mac: "{{ item.mac }}"
+    vm_image_dir: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}"
+    vm_osd_disks: []
+    vm_boot_cdrom: false
+  loop: "{{ utility_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+
+- name: Define utility VM in libvirt
+  ansible.builtin.command:
+    cmd: "virsh define /tmp/{{ item.name }}.xml"
+  register: virsh_define
+  changed_when: "'defined' in virsh_define.stdout"
+  failed_when: virsh_define.rc != 0 and 'already exists' not in virsh_define.stderr
+  loop: "{{ utility_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+
+- name: Start utility VM
+  community.libvirt.virt:
+    name: "{{ item.name }}"
+    state: running
+  loop: "{{ utility_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+
+- name: Wait for utility VM to be reachable via SSH
+  ansible.builtin.wait_for:
+    host: "{{ item.ip }}"
+    port: 22
+    delay: 10
+    timeout: 300
+  loop: "{{ utility_nodes }}"

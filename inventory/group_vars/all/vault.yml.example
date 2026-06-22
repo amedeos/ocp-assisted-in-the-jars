@@ -1,0 +1,12 @@
+---
+# Copy this file to vault.yml and fill in your values:
+#   cp vault.yml.example vault.yml
+#   # edit vault.yml with your credentials
+#   make vault-encrypt
+#
+# vault.yml is in .gitignore and will NOT be committed.
+
+secure_password: "CHANGE_ME"
+rh_subscription_user: "CHANGE_ME"
+rh_subscription_password: "CHANGE_ME"
+rh_subscription_pool: "CHANGE_ME"

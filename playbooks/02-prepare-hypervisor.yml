@@ -1,0 +1,8 @@
+---
+- name: Prepare hypervisor(s)
+  hosts: hypervisors
+  become: true
+  gather_facts: true
+  roles:
+    - role: hypervisor
+      tags: [hypervisor]

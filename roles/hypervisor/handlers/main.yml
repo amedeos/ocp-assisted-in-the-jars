@@ -1,0 +1,5 @@
+---
+- name: save_iptables
+  ansible.builtin.command: iptables-save -f /etc/iptables/rules-save
+  changed_when: true
+  listen: save_iptables

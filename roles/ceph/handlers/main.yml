@@ -1,0 +1,5 @@
+---
+- name: restart_ceph
+  ansible.builtin.command: cephadm shell -- ceph orch restart mon
+  changed_when: true
+  listen: restart_ceph

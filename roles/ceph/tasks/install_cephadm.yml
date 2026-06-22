@@ -1,0 +1,30 @@
+---
+- name: Register RHEL subscription
+  community.general.redhat_subscription:
+    username: "{{ rh_subscription_user }}"
+    password: "{{ rh_subscription_password }}"
+    pool_ids: "{{ rh_subscription_pool }}"
+    state: present
+  no_log: true
+
+- name: Enable Ceph tools repository
+  ansible.builtin.command:
+    cmd: >-
+      subscription-manager repos
+      --enable=rhceph-7-tools-for-rhel-10-x86_64-rpms
+  register: ceph_repo
+  changed_when: "'is enabled' not in ceph_repo.stdout"
+  failed_when: ceph_repo.rc != 0
+
+- name: Install cephadm and ceph-common
+  ansible.builtin.dnf:
+    name:
+      - cephadm
+      - ceph-common
+    state: present
+
+- name: Install container runtime
+  ansible.builtin.dnf:
+    name:
+      - podman
+    state: present

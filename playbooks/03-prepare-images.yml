@@ -1,0 +1,8 @@
+---
+- name: Prepare VM golden images
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  roles:
+    - role: image_prepare
+      tags: [images]

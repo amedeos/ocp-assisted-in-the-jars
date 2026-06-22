@@ -1,0 +1,78 @@
+---
+- name: Get ceph node hostname
+  ansible.builtin.command: hostname
+  register: ceph_hostname
+  changed_when: false
+
+- name: Check existing OSDs
+  ansible.builtin.command: ceph osd tree -f json
+  register: osd_tree
+  changed_when: false
+
+- name: Add OSD disks
+  ansible.builtin.command:
+    cmd: "ceph orch daemon add osd {{ ceph_hostname.stdout }}:{{ item }}"
+  loop: "{{ ceph_osd_devices }}"
+  register: osd_add
+  changed_when: "'Created osd' in osd_add.stdout"
+  failed_when: osd_add.rc != 0 and 'already' not in osd_add.stderr
+  when: (osd_tree.stdout | from_json).nodes | selectattr('type', 'eq', 'osd') | list | length < ceph_osd_devices | length
+
+- name: Wait for all OSDs to be up
+  ansible.builtin.command: ceph osd stat -f json
+  register: osd_stat
+  until: (osd_stat.stdout | from_json).num_up_osds | int >= ceph_osd_devices | length
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Check if pool exists
+  ansible.builtin.command: "ceph osd pool ls"
+  register: pool_list
+  changed_when: false
+
+- name: Create storage pool for OpenShift
+  ansible.builtin.command:
+    cmd: >-
+      ceph osd pool create {{ ceph_config.pool_name }}
+      {{ ceph_config.pg_num }}
+  when: ceph_config.pool_name not in pool_list.stdout_lines
+  changed_when: true
+
+- name: Enable RBD application on pool
+  ansible.builtin.command:
+    cmd: "ceph osd pool application enable {{ ceph_config.pool_name }} rbd"
+  register: rbd_enable
+  changed_when: "'enabled' in rbd_enable.stdout"
+  failed_when: rbd_enable.rc != 0 and 'already' not in rbd_enable.stderr
+
+- name: Create CephX credentials for OpenShift ODF
+  ansible.builtin.command:
+    cmd: >-
+      ceph auth get-or-create {{ ceph_client_name }}
+      mon 'profile rbd'
+      osd 'profile rbd pool={{ ceph_config.pool_name }}'
+      mgr 'profile rbd pool={{ ceph_config.pool_name }}'
+  register: cephx_key
+  changed_when: false
+  no_log: true
+
+- name: Get Ceph cluster FSID
+  ansible.builtin.command: ceph fsid
+  register: ceph_fsid
+  changed_when: false
+
+- name: Get Ceph monitor endpoints
+  ansible.builtin.command: ceph mon dump -f json
+  register: ceph_mon_dump
+  changed_when: false
+
+- name: Display external Ceph connection details
+  ansible.builtin.debug:
+    msg:
+      - "=== External Ceph Connection Details for ODF ==="
+      - "FSID: {{ ceph_fsid.stdout }}"
+      - "Monitor IP: {{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"
+      - "Pool: {{ ceph_config.pool_name }}"
+      - "Client: {{ ceph_client_name }}"
+      - "Key: (stored in ceph, retrieve with: ceph auth get {{ ceph_client_name }})"

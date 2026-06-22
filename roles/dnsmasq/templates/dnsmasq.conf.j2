@@ -1,0 +1,56 @@
+{{ ansible_managed | comment }}
+
+# Upstream DNS
+server={{ dnsmasq_upstream_dns }}
+
+# Do not use /etc/resolv.conf
+no-resolv
+
+# Do not use /etc/hosts
+no-hosts
+
+# Listen on all interfaces
+bind-interfaces
+
+# Domain
+domain={{ domain }}
+local=/{{ domain }}/
+
+# Expand simple hostnames to FQDN
+expand-hosts
+
+# ---- DNS records ----
+{% for node in cluster_nodes %}
+address=/{{ node.name }}.{{ domain }}/{{ node.ip }}
+{% endfor %}
+
+# API VIP
+address=/api.{{ domain }}/{{ vip.api }}
+address=/api-int.{{ domain }}/{{ vip.api }}
+
+# Ingress wildcard (*.apps)
+address=/.apps.{{ domain }}/{{ vip.ingress }}
+
+# ---- PTR records (reverse DNS) ----
+{% for node in cluster_nodes %}
+ptr-record={{ node.ip_last_octet }}.{{ baremetal_net.reverse }}.in-addr.arpa,{{ node.name }}.{{ domain }}
+{% endfor %}
+ptr-record={{ vip.api_last_octet }}.{{ baremetal_net.reverse }}.in-addr.arpa,api.{{ domain }}
+
+# ---- DHCP ----
+dhcp-range={{ baremetal_net.dhcp_start }},{{ baremetal_net.dhcp_end }},{{ dnsmasq_lease_time }}
+dhcp-option=option:router,{{ baremetal_net.gateway }}
+dhcp-option=option:dns-server,{{ (cluster_nodes | selectattr('role', 'eq', 'utility') | first).ip }}
+dhcp-option=option:domain-search,{{ domain }}
+dhcp-option=option:ntp-server,{{ baremetal_net.ntp }}
+dhcp-option=option:mtu,{{ baremetal_net.mtu }}
+
+# Fixed DHCP leases (MAC -> IP)
+{% for node in cluster_nodes %}
+dhcp-host={{ node.mac }},{{ node.ip }},{{ node.name }}
+{% endfor %}
+
+# Logging
+log-queries
+log-dhcp
+log-facility=/var/log/dnsmasq.log

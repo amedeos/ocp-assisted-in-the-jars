@@ -1,0 +1,47 @@
+---
+- name: Check if Ceph is already bootstrapped
+  ansible.builtin.command: ceph health
+  register: ceph_health_check
+  changed_when: false
+  failed_when: false
+
+- name: Bootstrap Ceph cluster
+  when: ceph_health_check.rc != 0
+  block:
+    - name: Get ceph VM IP
+      ansible.builtin.set_fact:
+        ceph_mon_ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"
+
+    - name: Run cephadm bootstrap
+      ansible.builtin.command:
+        cmd: >-
+          cephadm bootstrap
+          --single-host-defaults
+          --mon-ip {{ ceph_mon_ip }}
+          {% if not ceph_config.dashboard_enabled | bool %}--skip-dashboard{% endif %}
+          --skip-monitoring-stack
+      register: ceph_bootstrap
+      changed_when: "'Bootstrap complete' in ceph_bootstrap.stdout"
+      failed_when: ceph_bootstrap.rc != 0
+
+  rescue:
+    - name: Collect cephadm logs on failure
+      ansible.builtin.command: journalctl -u ceph* --no-pager -n 100
+      register: ceph_logs
+      changed_when: false
+
+    - name: Display ceph failure logs
+      ansible.builtin.debug:
+        var: ceph_logs.stdout_lines
+
+    - name: Fail with context
+      ansible.builtin.fail:
+        msg: "Ceph bootstrap failed. See logs above."
+
+- name: Wait for Ceph cluster to be healthy
+  ansible.builtin.command: ceph health
+  register: ceph_health
+  until: "'HEALTH_OK' in ceph_health.stdout or 'HEALTH_WARN' in ceph_health.stdout"
+  retries: 30
+  delay: 10
+  changed_when: false

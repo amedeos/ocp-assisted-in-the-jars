@@ -1,0 +1,8 @@
+---
+- name: Destroy all VMs and clean up
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  roles:
+    - role: cleanup
+      tags: [cleanup]

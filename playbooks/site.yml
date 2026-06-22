@@ -1,0 +1,32 @@
+---
+- name: Pre-flight validation
+  ansible.builtin.import_playbook: preflight.yml
+  tags: [preflight]
+
+- name: Create SSH key
+  ansible.builtin.import_playbook: 01-create-ssh-key.yml
+  tags: [ssh-key]
+
+- name: Prepare hypervisor
+  ansible.builtin.import_playbook: 02-prepare-hypervisor.yml
+  tags: [hypervisor]
+
+- name: Prepare VM images
+  ansible.builtin.import_playbook: 03-prepare-images.yml
+  tags: [images]
+
+- name: Create all VMs
+  ansible.builtin.import_playbook: 04-create-vms.yml
+  tags: [create-vms]
+
+- name: Configure utility (DNS + DHCP)
+  ansible.builtin.import_playbook: 05-configure-utility.yml
+  tags: [configure-utility]
+
+- name: Configure Ceph storage
+  ansible.builtin.import_playbook: 06-configure-ceph.yml
+  tags: [configure-ceph]
+
+- name: Boot control-plane nodes from discovery ISO
+  ansible.builtin.import_playbook: 07-boot-control-planes.yml
+  tags: [boot-control-planes]
