@@ -3,7 +3,7 @@
   ansible.builtin.command:
     cmd: >-
       subscription-manager repos
-      --enable=rhceph-7-tools-for-rhel-10-x86_64-rpms
+      --enable=rhceph-9-tools-for-rhel-10-x86_64-rpms
   register: ceph_repo
   changed_when: "'is enabled' not in ceph_repo.stdout"
   failed_when: ceph_repo.rc != 0
