@@ -18,7 +18,7 @@
       method=manual
       addresses={{ vm.ip }}/{{ baremetal_net.prefix }}
       gateway={{ baremetal_net.gateway }}
-      dns={{ (cluster_nodes | selectattr('role', 'eq', 'utility') | first).ip }}
+      dns={{ dns_forwarder if vm.role == 'utility' else (cluster_nodes | selectattr('role', 'eq', 'utility') | first).ip }}
       dns-search={{ domain }}
 
       [ethernet]
