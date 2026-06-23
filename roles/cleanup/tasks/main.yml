@@ -35,9 +35,11 @@
     - ceph
   when: cleanup_remove_images | bool
 
-- name: Remove temporary XML files
-  ansible.builtin.file:
-    path: "/tmp/{{ item.name }}.xml"
+- name: Remove SSH config entries
+  ansible.builtin.blockinfile:
+    path: "{{ ansible_facts.env.HOME }}/.ssh/config"
+    marker: "# {mark} ocp-assisted-in-the-jars {{ cluster_name }}"
     state: absent
-  loop: "{{ cluster_nodes }}"
-  delegate_to: "{{ item.hypervisor }}"
+  delegate_to: localhost
+  become: false
+  run_once: true

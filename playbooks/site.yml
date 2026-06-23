@@ -15,6 +15,10 @@
   ansible.builtin.import_playbook: 04a-create-utility.yml
   tags: [create-utility]
 
+- name: Configure SSH shortcuts for VMs
+  ansible.builtin.import_playbook: 04c-ssh-config.yml
+  tags: [ssh-config]
+
 - name: Configure utility (DNS + DHCP)
   ansible.builtin.import_playbook: 05-configure-utility.yml
   tags: [configure-utility]

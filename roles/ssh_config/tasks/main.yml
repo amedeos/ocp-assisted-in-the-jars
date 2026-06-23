@@ -1,0 +1,29 @@
+---
+- name: Ensure ~/.ssh directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/.ssh"
+    state: directory
+    mode: "0700"
+
+- name: Ensure ~/.ssh/config exists
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/.ssh/config"
+    state: touch
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+
+- name: Add VM entries to SSH config
+  ansible.builtin.blockinfile:
+    path: "{{ ansible_facts.env.HOME }}/.ssh/config"
+    marker: "# {mark} ocp-assisted-in-the-jars {{ cluster_name }}"
+    block: |
+      {% for node in cluster_nodes | selectattr('role', 'in', ['utility', 'ceph']) %}
+      Host {{ node.name }}
+          HostName {{ node.ip }}
+          User root
+          IdentityFile {{ ssh_key_private }}
+          StrictHostKeyChecking no
+          UserKnownHostsFile /dev/null
+
+      {% endfor %}

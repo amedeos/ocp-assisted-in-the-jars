@@ -1,4 +1,4 @@
-.PHONY: help deploy preflight ssh-key create-utility create-vms configure-utility configure-ceph \
+.PHONY: help deploy preflight ssh-key ssh-config create-utility create-vms configure-utility configure-ceph \
         boot-control-planes cleanup startup shutdown lint check \
         vault-edit vault-encrypt vault-decrypt \
         pull-secret-encrypt pull-secret-decrypt collections
@@ -33,6 +33,9 @@ ssh-key: ## Generate SSH key pair (run before creating cluster on console.redhat
 
 preflight: ## Run pre-flight validation only (read-only)
 	$(ANSIBLE_CMD) playbooks/preflight.yml
+
+ssh-config: ## Add VM entries to ~/.ssh/config
+	$(ANSIBLE_CMD) playbooks/04c-ssh-config.yml
 
 create-utility: ## Create utility VM only
 	$(ANSIBLE_CMD) playbooks/04a-create-utility.yml
