@@ -34,3 +34,7 @@
 - name: Boot control-plane nodes from discovery ISO
   ansible.builtin.import_playbook: 07-boot-control-planes.yml
   tags: [boot-control-planes]
+
+- name: Post-install - setup oc client and kubeconfig
+  ansible.builtin.import_playbook: 08-post-install.yml
+  tags: [post-install]

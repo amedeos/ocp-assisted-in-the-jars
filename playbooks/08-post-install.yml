@@ -1,0 +1,8 @@
+---
+- name: Post-install - setup oc client and kubeconfig on utility VM
+  hosts: utility_vms
+  become: true
+  gather_facts: true
+  roles:
+    - role: ocp_client
+      tags: [post-install]

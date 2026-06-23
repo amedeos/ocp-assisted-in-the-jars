@@ -1,0 +1,64 @@
+---
+- name: Check if oc client is installed
+  ansible.builtin.command: oc version --client
+  register: oc_check
+  changed_when: false
+  failed_when: false
+
+- name: Download and install oc client
+  when: oc_check.rc != 0
+  block:
+    - name: Download oc client tarball
+      ansible.builtin.get_url:
+        url: "{{ ocp_client_url }}"
+        dest: /tmp/openshift-client-linux.tar.gz
+        mode: "0644"
+
+    - name: Extract oc client
+      ansible.builtin.unarchive:
+        src: /tmp/openshift-client-linux.tar.gz
+        dest: /usr/local/bin/
+        remote_src: true
+        extra_opts:
+          - oc
+          - kubectl
+
+    - name: Remove tarball
+      ansible.builtin.file:
+        path: /tmp/openshift-client-linux.tar.gz
+        state: absent
+
+- name: Copy SSH key for control-plane access
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../files/.ssh/id_rsa"
+    dest: /root/.ssh/cp_key
+    mode: "0600"
+
+- name: Fetch kubeconfig from control-plane-0
+  ansible.builtin.shell:
+    cmd: >-
+      ssh -i /root/.ssh/cp_key
+      -o StrictHostKeyChecking=no
+      -o UserKnownHostsFile=/dev/null
+      core@{{ (controlplane_nodes | first).ip }}
+      sudo cat {{ ocp_kubeconfig_src }}
+  register: kubeconfig_content
+  changed_when: false
+  no_log: true
+
+- name: Save kubeconfig
+  ansible.builtin.copy:
+    content: "{{ kubeconfig_content.stdout }}"
+    dest: "{{ ocp_kubeconfig_path }}"
+    mode: "0600"
+  no_log: true
+
+- name: Verify oc client works with kubeconfig
+  ansible.builtin.command:
+    cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} get nodes"
+  register: oc_nodes
+  changed_when: false
+
+- name: Display cluster nodes
+  ansible.builtin.debug:
+    var: oc_nodes.stdout_lines
