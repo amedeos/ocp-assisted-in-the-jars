@@ -14,14 +14,14 @@
 
     - name: Create podman auth directory
       ansible.builtin.file:
-        path: /run/containers/0
+        path: /root/.config/containers
         state: directory
         mode: "0700"
 
-    - name: Copy pull secret to ceph VM
+    - name: Copy pull secret as podman auth
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/pull-secret.txt"
-        dest: /run/containers/0/auth.json
+        dest: /root/.config/containers/auth.json
         mode: "0600"
 
     - name: Run cephadm bootstrap
