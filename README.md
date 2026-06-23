@@ -34,6 +34,7 @@ Control-plane VMs use `host-passthrough` CPU mode for OpenShift Virtualization s
 - **Hypervisor**: Gentoo Linux (or any Linux with KVM) with nested virtualization enabled
 - **Bridge**: Network bridge `bm` must be created manually on the hypervisor
 - **RHEL image**: `rhel-10.2-x86_64-kvm.qcow2` downloaded from access.redhat.com
+- **Pull secret**: Downloaded from [console.redhat.com](https://console.redhat.com/openshift/install/pull-secret) and saved to `files/pull-secret.txt` (used by cephadm to pull container images from `registry.redhat.io`)
 - **Discovery ISO**: Generated from [Assisted Installer](https://console.redhat.com/openshift/assisted-installer/clusters) (pull secret is provided there) and saved to `/var/lib/libvirt/images/discovery-image.iso`
 - **Ansible**: >= 2.15 with required collections (`make collections`)
 - **Packages on hypervisor**: `qemu`, `libvirt`, `libguestfs-tools`, `virt-install`

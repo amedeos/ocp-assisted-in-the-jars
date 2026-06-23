@@ -13,3 +13,8 @@
 secure_password: "CHANGE_ME"
 rh_activation_key: "CHANGE_ME"
 rh_org_id: "CHANGE_ME"
+
+# Pull secret for container registries (registry.redhat.io).
+# Download from: https://console.redhat.com/openshift/install/pull-secret
+# Save to: files/pull-secret.txt (gitignored, not in vault)
+# Used by cephadm bootstrap to pull Ceph container images.

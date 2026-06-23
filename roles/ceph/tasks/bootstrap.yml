@@ -12,6 +12,12 @@
       ansible.builtin.set_fact:
         ceph_mon_ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"
 
+    - name: Copy pull secret to ceph VM
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/pull-secret.txt"
+        dest: /root/pull-secret.txt
+        mode: "0600"
+
     - name: Run cephadm bootstrap
       ansible.builtin.command:
         cmd: >-
@@ -19,6 +25,7 @@
           --single-host-defaults
           --allow-fqdn-hostname
           --mon-ip {{ ceph_mon_ip }}
+          --registry-json /root/pull-secret.txt
           {% if not ceph_config.dashboard_enabled | bool %}--skip-dashboard{% endif %}
           --skip-monitoring-stack
       register: ceph_bootstrap
