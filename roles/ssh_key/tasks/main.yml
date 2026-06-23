@@ -9,5 +9,5 @@
   community.crypto.openssh_keypair:
     path: "{{ ssh_key_private }}"
     type: "{{ ssh_key_type }}"
-    size: "{{ ssh_key_size }}"
     state: present
+    force: false

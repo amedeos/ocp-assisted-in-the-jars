@@ -1,3 +1,2 @@
 ---
-ssh_key_type: rsa
-ssh_key_size: 4096
+ssh_key_type: ed25519
