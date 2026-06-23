@@ -1,6 +1,7 @@
 .PHONY: help deploy preflight ssh-key create-utility create-vms configure-utility configure-ceph \
         boot-control-planes cleanup startup shutdown lint check \
-        vault-edit vault-encrypt vault-decrypt collections
+        vault-edit vault-encrypt vault-decrypt \
+        pull-secret-encrypt pull-secret-decrypt collections
 
 VAULT_PASS_FILE ?= .vault-pass
 ANSIBLE_OPTS ?=
@@ -74,4 +75,12 @@ vault-encrypt: ## Encrypt the vault file
 
 vault-decrypt: ## Decrypt the vault file (for manual editing)
 	ansible-vault decrypt inventory/group_vars/all/vault.yml \
+	  --vault-password-file $(VAULT_PASS_FILE)
+
+pull-secret-encrypt: ## Encrypt the pull secret file
+	ansible-vault encrypt files/pull-secret.txt \
+	  --vault-password-file $(VAULT_PASS_FILE)
+
+pull-secret-decrypt: ## Decrypt the pull secret file
+	ansible-vault decrypt files/pull-secret.txt \
 	  --vault-password-file $(VAULT_PASS_FILE)
