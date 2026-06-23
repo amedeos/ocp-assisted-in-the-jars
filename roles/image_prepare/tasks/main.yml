@@ -43,7 +43,7 @@
 
 - name: Customize golden images
   block:
-    - name: Customize image for {{ vm.name }}
+    - name: Customize golden images
       ansible.builtin.command:
         cmd: >-
           virt-customize -a {{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2
@@ -62,7 +62,7 @@
       ansible.builtin.fail:
         msg: "virt-customize failed. Check that libguestfs-tools is installed."
 
-- name: Inject network configuration for {{ vm.name }}
+- name: Inject network configuration
   ansible.builtin.include_tasks: inject_network.yml
   loop: "{{ image_prepare_vms }}"
   loop_control:
