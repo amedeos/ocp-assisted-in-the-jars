@@ -3,6 +3,7 @@
   hosts: hypervisors
   become: true
   gather_facts: false
+  run_once: true
   roles:
     - role: vm_create
       tags: [create-vms]
