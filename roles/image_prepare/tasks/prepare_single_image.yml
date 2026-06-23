@@ -16,7 +16,7 @@
 - name: Expand base image into golden image for {{ vm.name }}
   ansible.builtin.command:
     cmd: >-
-      virt-resize --expand /dev/sda4
+      virt-resize --expand {{ image_expand_partition }}
       {{ image_dir }}/{{ supported_os }}-base.qcow2
       {{ image_dir }}/{{ supported_os }}-{{ vm.name }}-empty.qcow2
   when: not golden_image_stat.stat.exists

@@ -1,4 +1,6 @@
 ---
+image_expand_partition: /dev/sda3
+
 image_prepare_vms:
   - name: utility
     disk_gb: "{{ vm_specs.utility.os_disk_gb }}"
