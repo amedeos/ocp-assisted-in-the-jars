@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: {{ odf_operator_name }}
+  namespace: {{ odf_namespace }}
+spec:
+  channel: {{ odf_channel }}
+  installPlanApproval: Automatic
+  name: {{ odf_operator_name }}
+  source: {{ odf_catalog_source }}
+  sourceNamespace: openshift-marketplace

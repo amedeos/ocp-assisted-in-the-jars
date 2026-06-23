@@ -38,3 +38,7 @@
 - name: Post-install - setup oc client and kubeconfig
   ansible.builtin.import_playbook: 08-post-install.yml
   tags: [post-install]
+
+- name: Configure ODF with external Ceph
+  ansible.builtin.import_playbook: 09-configure-odf.yml
+  tags: [configure-odf]

@@ -1,0 +1,8 @@
+---
+- name: Configure ODF with external Ceph storage
+  hosts: utility_vms
+  become: true
+  gather_facts: false
+  roles:
+    - role: odf
+      tags: [configure-odf]
