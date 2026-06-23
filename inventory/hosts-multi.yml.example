@@ -1,0 +1,80 @@
+---
+# Multi-hypervisor inventory example
+#
+# Copy and customize for your lab:
+#   cp hosts-multi.yml.example hosts-multi.yml
+#   # edit hosts-multi.yml with your hostnames, bridge names, IPs, MACs
+#   make deploy INVENTORY=inventory/hosts-multi.yml
+#
+# hosts-*.yml files are in .gitignore and will NOT be committed.
+#
+# Requirements:
+#   - SSH access (as root) from Ansible controller to each hypervisor
+#   - The bridge specified in bridge_bm must exist on each hypervisor
+#   - All bridges must share the same L2 domain (same VLAN / broadcast domain)
+#   - RHEL golden image must be present on each hypervisor at image_dir
+all:
+  children:
+    hypervisors:
+      hosts:
+        hypervisor01:
+          ansible_user: root
+          ansible_python_interpreter: /usr/bin/python3
+          image_dir: /var/lib/libvirt/images
+          bridge_bm: br-2003
+        hypervisor02:
+          ansible_user: root
+          ansible_python_interpreter: /usr/bin/python3
+          image_dir: /var/lib/libvirt/images
+          bridge_bm: br-2003
+
+    utility:
+      hosts:
+        utility:
+          ansible_host: 192.168.203.254
+          ansible_user: root
+          ansible_ssh_private_key_file: files/.ssh/id_rsa
+          ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+    ceph:
+      hosts:
+        ceph:
+          ansible_host: 192.168.203.252
+          ansible_user: root
+          ansible_ssh_private_key_file: files/.ssh/id_rsa
+          ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+  vars:
+    # Override cluster_nodes to assign VMs to specific hypervisors.
+    # The 'hypervisor' field must match a host name under 'hypervisors' above.
+    cluster_nodes:
+      - name: utility
+        role: utility
+        hypervisor: hypervisor02
+        ip: 192.168.203.254
+        ip_last_octet: 254
+        mac: "52:54:00:00:33:FE"
+      - name: ceph
+        role: ceph
+        hypervisor: hypervisor02
+        ip: 192.168.203.252
+        ip_last_octet: 252
+        mac: "52:54:00:00:33:FC"
+      - name: control-plane-0
+        role: control-plane
+        hypervisor: hypervisor01
+        ip: 192.168.203.53
+        ip_last_octet: 53
+        mac: "52:54:00:00:33:00"
+      - name: control-plane-1
+        role: control-plane
+        hypervisor: hypervisor01
+        ip: 192.168.203.54
+        ip_last_octet: 54
+        mac: "52:54:00:00:33:01"
+      - name: control-plane-2
+        role: control-plane
+        hypervisor: hypervisor02
+        ip: 192.168.203.55
+        ip_last_octet: 55
+        mac: "52:54:00:00:33:02"

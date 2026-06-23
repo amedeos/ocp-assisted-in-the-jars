@@ -22,6 +22,7 @@
     vm_cpu_mode: "host-passthrough"
     vm_mac: "{{ item.mac }}"
     vm_image_dir: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}"
+    vm_bridge: "{{ hostvars[item.hypervisor].bridge_bm | default(bridge_bm) }}"
     vm_osd_disks: []
     vm_boot_cdrom: true
   loop: "{{ controlplane_nodes }}"

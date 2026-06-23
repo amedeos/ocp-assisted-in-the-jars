@@ -53,7 +53,7 @@
 
     <!-- Network interface on baremetal bridge -->
     <interface type='bridge'>
-      <source bridge='{{ bridge_bm }}'/>
+      <source bridge='{{ vm_bridge }}'/>
       <mac address='{{ vm_mac }}'/>
       <model type='virtio'/>
     </interface>
