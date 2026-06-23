@@ -34,8 +34,7 @@ Control-plane VMs use `host-passthrough` CPU mode for OpenShift Virtualization s
 - **Hypervisor**: Gentoo Linux (or any Linux with KVM) with nested virtualization enabled
 - **Bridge**: Network bridge `bm` must be created manually on the hypervisor
 - **RHEL image**: `rhel-10.2-x86_64-kvm.qcow2` downloaded from access.redhat.com
-- **Pull secret**: Downloaded from [console.redhat.com](https://console.redhat.com/openshift/install/pull-secret) and saved to `files/pull-secret.txt`
-- **Discovery ISO**: Generated from [Assisted Installer](https://console.redhat.com/openshift/assisted-installer/clusters) and saved to `/var/lib/libvirt/images/discovery-image.iso`
+- **Discovery ISO**: Generated from [Assisted Installer](https://console.redhat.com/openshift/assisted-installer/clusters) (pull secret is provided there) and saved to `/var/lib/libvirt/images/discovery-image.iso`
 - **Ansible**: >= 2.15 with required collections (`make collections`)
 - **Packages on hypervisor**: `qemu`, `libvirt`, `libguestfs-tools`, `virt-install`
 - **RAM**: Minimum ~210GB for all VMs on a single host
@@ -54,7 +53,6 @@ make vault-encrypt
 
 # 3. Place required files
 cp /path/to/rhel-10.2-x86_64-kvm.qcow2 /root/images/
-cp /path/to/pull-secret.txt files/
 cp /path/to/discovery-image.iso /var/lib/libvirt/images/
 
 # 4. Run pre-flight checks
@@ -161,4 +159,4 @@ Variables in vault.yml:
 - `rh_subscription_user` / `rh_subscription_password` -- Red Hat portal credentials
 - `rh_subscription_pool` -- RHEL subscription pool ID
 
-Never commit vault files, SSH keys, or pull-secret files.
+Never commit vault files or SSH keys.

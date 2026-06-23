@@ -45,9 +45,6 @@ ssh_key_public: "{{ ssh_key_dir }}/id_rsa.pub"
 # Default image storage directory
 image_dir: /var/lib/libvirt/images
 
-# Pull secret file path
-pull_secret_file: files/pull-secret.txt
-
 # VM specifications
 vm_specs:
   utility:

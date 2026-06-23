@@ -124,27 +124,6 @@
           RHEL base image not found at {{ image_location }}.
           Download from access.redhat.com and place it there.
 
-    # ---- Pull secret ----
-    - name: Check pull secret file exists
-      ansible.builtin.stat:
-        path: "{{ pull_secret_file }}"
-      register: pull_secret_stat
-      delegate_to: localhost
-
-    - name: Verify pull secret is present
-      ansible.builtin.assert:
-        that: pull_secret_stat.stat.exists
-        fail_msg: >-
-          Pull secret not found at {{ pull_secret_file }}.
-          Download from console.redhat.com and place it there.
-      run_once: true
-
-    - name: Validate pull secret is valid JSON
-      ansible.builtin.command: "python3 -m json.tool {{ pull_secret_file }}"
-      delegate_to: localhost
-      changed_when: false
-      run_once: true
-
     # ---- Summary ----
     - name: Pre-flight checks passed
       ansible.builtin.debug:
