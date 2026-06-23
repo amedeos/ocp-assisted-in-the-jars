@@ -1,8 +1,14 @@
 ---
+- name: Skip image preparation if no VMs assigned to this hypervisor
+  ansible.builtin.debug:
+    msg: "No utility/ceph VMs on {{ inventory_hostname }}, skipping image preparation"
+  when: image_prepare_vms | length == 0
+
 - name: Check if base image exists locally
   ansible.builtin.stat:
     path: "{{ image_location }}"
   register: base_image_stat
+  when: image_prepare_vms | length > 0
 
 - name: Fail if base image not found
   ansible.builtin.assert:
@@ -10,6 +16,7 @@
     fail_msg: >-
       RHEL base image not found at {{ image_location }}.
       Download it from access.redhat.com and place it there.
+  when: image_prepare_vms | length > 0
 
 - name: Copy base image to image directory
   ansible.builtin.copy:
@@ -18,8 +25,9 @@
     remote_src: true
     force: false
     mode: "0644"
+  when: image_prepare_vms | length > 0
 
-- name: Prepare golden images for utility and ceph
+- name: Prepare golden images
   ansible.builtin.include_tasks: prepare_single_image.yml
   loop: "{{ image_prepare_vms }}"
   loop_control:
