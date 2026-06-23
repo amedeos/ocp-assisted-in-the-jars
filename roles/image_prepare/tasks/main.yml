@@ -38,6 +38,8 @@
     src: "{{ ssh_key_public }}"
   register: ssh_pub_content
   delegate_to: localhost
+  become: false
+  run_once: true
 
 - name: Customize golden images
   block:
