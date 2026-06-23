@@ -1,12 +1,23 @@
 ---
 # Multi-hypervisor inventory example
 #
-# Copy and customize for your lab:
-#   cp hosts-multi.yml.example hosts-multi.yml
-#   # edit hosts-multi.yml with your hostnames, bridge names, IPs, MACs
-#   make deploy INVENTORY=inventory/hosts-multi.yml
+# This file defines hypervisors and VM placement. To override VM resources
+# (CPU, RAM, disk) use a separate extra-vars file -- see lab-vars.yml.example.
 #
-# hosts-*.yml files are in .gitignore and will NOT be committed.
+# Setup:
+#   1. cp hosts-multi.yml.example hosts-multi.yml
+#   2. cp lab-vars.yml.example lab-vars.yml        (optional, for resource overrides)
+#   3. Edit both files with your lab values
+#   4. Deploy:
+#        make deploy INVENTORY=inventory/hosts-multi.yml
+#        make deploy INVENTORY=inventory/hosts-multi.yml CUSTOM_VARS=inventory/lab-vars.yml
+#
+# Why two files?
+#   VM resources (vm_specs) are defined in group_vars/all/main.yml. Ansible
+#   variable precedence means inventory vars cannot override group_vars.
+#   CUSTOM_VARS uses -e @file which has the highest precedence.
+#
+# Both hosts-*.yml and *-vars.yml are in .gitignore and will NOT be committed.
 #
 # Requirements:
 #   - SSH access (as root) from Ansible controller to each hypervisor

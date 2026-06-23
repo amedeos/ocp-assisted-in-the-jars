@@ -66,76 +66,55 @@ make deploy
 
 ## Custom overrides (multi-hypervisor)
 
-By default, all VMs are created on `localhost`. To distribute VMs across multiple hypervisors, create custom files and pass them at runtime:
+By default, all VMs are created on `localhost`. To distribute VMs across multiple hypervisors you need two files:
+
+| File | What it controls | Why separate |
+|---|---|---|
+| **Custom inventory** (`hosts-*.yml`) | Hypervisor hosts, bridge name, VM placement (`cluster_nodes`) | Defines *who* and *where* |
+| **Extra-vars file** (`*-vars.yml`, optional) | VM resources per role (`vm_specs`: CPU, RAM, disk) | Needs `-e @file` to override `group_vars/all/main.yml` (highest Ansible precedence) |
+
+Both are gitignored. Templates are provided in `inventory/`:
 
 ```bash
-make deploy INVENTORY=/path/to/my-inventory.yml CUSTOM_VARS=/path/to/my-vars.yml
+# 1. Create your files from examples
+cp inventory/hosts-multi.yml.example inventory/hosts-mylab.yml
+cp inventory/lab-vars.yml.example inventory/lab-vars.yml
+
+# 2. Edit with your hostnames, bridge names, IPs, MACs, VM resources
+vi inventory/hosts-mylab.yml inventory/lab-vars.yml
+
+# 3. Deploy
+make deploy INVENTORY=inventory/hosts-mylab.yml CUSTOM_VARS=inventory/lab-vars.yml
 ```
 
-Example custom inventory (`my-inventory.yml`):
+### Per-hypervisor settings
+
+Each hypervisor can have its own `bridge_bm` and `image_dir`:
+
 ```yaml
-all:
-  children:
-    hypervisors:
-      hosts:
-        amelab01:
-          ansible_host: 192.168.1.10
-          ansible_user: root
-          image_dir: /var/lib/libvirt/images
-        amelab02:
-          ansible_host: 192.168.1.11
-          ansible_user: root
-          image_dir: /var/lib/libvirt/imagesnvme
-    utility:
-      hosts:
-        utility:
-          ansible_host: 192.168.203.254
-          ansible_user: root
-          ansible_ssh_private_key_file: files/.ssh/id_rsa
-          ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-    ceph:
-      hosts:
-        ceph:
-          ansible_host: 192.168.203.252
-          ansible_user: root
-          ansible_ssh_private_key_file: files/.ssh/id_rsa
-          ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+hypervisors:
+  hosts:
+    host01:
+      bridge_bm: br-2003       # libvirt bridge name on this host
+      image_dir: /var/lib/libvirt/images
+    host02:
+      bridge_bm: virbr-ocp     # different bridge on this host
+      image_dir: /data/libvirt/images
 ```
 
-Example custom vars (`my-vars.yml`):
+### VM resource overrides
+
+To change CPU, RAM, or disk for a VM role, set `vm_specs` in the extra-vars file:
+
 ```yaml
-cluster_nodes:
-  - name: utility
-    role: utility
-    hypervisor: amelab01
-    ip: 192.168.203.254
-    ip_last_octet: 254
-    mac: "52:54:00:00:33:FE"
-  - name: ceph
-    role: ceph
-    hypervisor: amelab01
-    ip: 192.168.203.252
-    ip_last_octet: 252
-    mac: "52:54:00:00:33:FC"
-  - name: control-plane-0
-    role: control-plane
-    hypervisor: amelab01
-    ip: 192.168.203.53
-    ip_last_octet: 53
-    mac: "52:54:00:00:33:00"
-  - name: control-plane-1
-    role: control-plane
-    hypervisor: amelab02
-    ip: 192.168.203.54
-    ip_last_octet: 54
-    mac: "52:54:00:00:33:01"
-  - name: control-plane-2
-    role: control-plane
-    hypervisor: amelab02
-    ip: 192.168.203.55
-    ip_last_octet: 55
-    mac: "52:54:00:00:33:02"
+vm_specs:
+  controlplane:
+    cpu: 8
+    memory_mb: 32768
+    os_disk_gb: 120
 ```
+
+Only include the roles you want to override; defaults for the rest come from `inventory/group_vars/all/main.yml`.
 
 ## Makefile targets
 

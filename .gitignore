@@ -23,6 +23,10 @@ inventory/group_vars/all/custom-*.yml
 inventory/hosts-*.yml
 !inventory/hosts.yml
 
+# Custom extra-vars files (lab-specific resource overrides)
+inventory/*-vars.yml
+!inventory/*-vars.yml.example
+
 # Ansible artifacts
 *.retry
 

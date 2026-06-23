@@ -27,6 +27,8 @@ make check                                             # dry run
 make cleanup                                           # destroy everything
 make deploy CUSTOM_VARS=/path/to/vars.yml              # custom overrides
 make deploy INVENTORY=/path/to/hosts.yml               # custom inventory
+make deploy INVENTORY=inventory/hosts-lab.yml \
+            CUSTOM_VARS=inventory/lab-vars.yml          # multi-hypervisor with resource overrides
 ```
 
 ## Architecture
@@ -39,7 +41,9 @@ make deploy INVENTORY=/path/to/hosts.yml               # custom inventory
   templates.
 - `inventory/` -- YAML inventory with `group_vars/all/`. Default
   hypervisor is `localhost` (no SSH needed). Multi-hypervisor via
-  custom inventory override.
+  custom inventory override. `.example` templates provided:
+  - `hosts-multi.yml.example` -- hypervisors and VM placement
+  - `lab-vars.yml.example` -- VM resource overrides (CPU, RAM, disk)
 
 ### Execution flow
 
@@ -58,6 +62,22 @@ All VMs defined in `inventory/group_vars/all/main.yml` under
 `cluster_nodes`. Each entry: name, role, hypervisor, ip, mac.
 The `hypervisor` field controls which physical host creates the VM
 (`localhost` by default, override via custom vars).
+
+### Customising a multi-hypervisor deployment
+
+Two files are needed, both gitignored:
+
+1. **Custom inventory** (`inventory/hosts-*.yml`) -- defines the
+   hypervisor hosts (SSH connection, `image_dir`, `bridge_bm`) and
+   overrides `cluster_nodes` to place each VM on a specific
+   hypervisor.
+2. **Extra-vars file** (`inventory/*-vars.yml`, optional) -- overrides
+   `vm_specs` to change CPU, RAM, or disk per VM role. This must be a
+   separate file passed via `CUSTOM_VARS` because Ansible gives
+   `-e @file` the highest variable precedence, which is needed to
+   override `group_vars/all/main.yml`.
+
+`.example` templates for both files are provided in `inventory/`.
 
 ### Secrets
 

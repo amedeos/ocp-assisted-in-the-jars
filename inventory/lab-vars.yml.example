@@ -1,0 +1,32 @@
+---
+# Lab-specific variable overrides.
+# Passed via CUSTOM_VARS to get highest Ansible precedence (-e @file),
+# which overrides group_vars/all/main.yml defaults.
+#
+# Copy and customize:
+#   cp inventory/lab-vars.yml.example inventory/lab-vars.yml
+#   # edit lab-vars.yml with your values
+#   make deploy INVENTORY=inventory/hosts-lab.yml CUSTOM_VARS=inventory/lab-vars.yml
+#
+# lab-vars.yml is in .gitignore and will NOT be committed.
+
+vm_specs:
+  utility:
+    cpu: 2
+    memory_mb: 4096
+    os_disk_gb: 50
+  ceph:
+    cpu: 4
+    memory_mb: 16384
+    os_disk_gb: 50
+    osd_disks:
+      - size_gb: 200
+        device: vdb
+      - size_gb: 200
+        device: vdc
+      - size_gb: 200
+        device: vdd
+  controlplane:
+    cpu: 16
+    memory_mb: 65536
+    os_disk_gb: 120
