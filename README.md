@@ -47,22 +47,22 @@ Control-plane VMs use `host-passthrough` CPU mode for OpenShift Virtualization s
 # 1. Install Ansible collections
 make collections
 
-# 2. Set up secrets
+# 2. Generate SSH key pair (needed for Assisted Installer cluster setup)
+make ssh-key
+cat files/.ssh/id_rsa.pub   # copy this to console.redhat.com
+
+# 3. Set up secrets
 cp inventory/group_vars/all/vault.yml.example inventory/group_vars/all/vault.yml
 # Edit vault.yml with your credentials (activation key, org id, password)
 make vault-encrypt
-
-# 3. Place required files on each hypervisor
-#    RHEL 10 image: /root/images/rhel-10.2-x86_64-kvm.qcow2
-#    Discovery ISO: /var/lib/libvirt/images/discovery-image.iso
 
 # 4. Pull secret (for Ceph container images)
 cp /path/to/pull-secret.txt files/pull-secret.txt
 make pull-secret-encrypt
 
-# 5. Generate SSH key pair (needed for console.redhat.com cluster setup)
-make ssh-key
-cat files/.ssh/id_rsa.pub   # copy this to Assisted Installer
+# 5. Place required files on each hypervisor
+#    RHEL 10 image: /root/images/rhel-10.2-x86_64-kvm.qcow2
+#    Discovery ISO: /var/lib/libvirt/images/discovery-image.iso
 
 # 6. Create custom inventory and vars (multi-hypervisor)
 cp inventory/hosts-multi.yml.example inventory/hosts-mylab.yml
