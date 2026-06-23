@@ -1,5 +1,10 @@
-<domain type='kvm'>
+<domain type='kvm' xmlns:libosinfo='http://libosinfo.org/xmlns/libvirt/domain/1.0'>
   <name>{{ vm_name }}</name>
+  <metadata>
+    <libosinfo:libosinfo>
+      <libosinfo:os id='http://redhat.com/rhel/10.2'/>
+    </libosinfo:libosinfo>
+  </metadata>
   <memory unit='MiB'>{{ vm_memory_mb }}</memory>
   <vcpu>{{ vm_cpu }}</vcpu>
 
@@ -67,8 +72,18 @@
 
     <graphics type='vnc' port='-1' autoport='yes' listen='0.0.0.0'/>
 
+    <video>
+      <model type='virtio'/>
+    </video>
+
     <channel type='unix'>
       <target type='virtio' name='org.qemu.guest_agent.0'/>
     </channel>
+
+    <rng model='virtio'>
+      <backend model='random'>/dev/urandom</backend>
+    </rng>
+
+    <memballoon model='virtio'/>
   </devices>
 </domain>
