@@ -28,7 +28,7 @@
       --disk path={{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/{{ item.item.name }}.qcow2
       --import
       --network bridge={{ hostvars[item.item.hypervisor].bridge_bm | default(bridge_bm) }},mac={{ item.item.mac }},model=virtio
-      --graphics vnc,listen=0.0.0.0
+      --graphics spice
       --cpu host-model
       --noautoconsole
   loop: "{{ utility_vm_exists.results }}"

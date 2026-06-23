@@ -30,7 +30,7 @@
       --cdrom {{ assisted.discovery_iso_path }}
       --boot cdrom,hd
       --network bridge={{ hostvars[item.item.hypervisor].bridge_bm | default(bridge_bm) }},mac={{ item.item.mac }},model=virtio
-      --graphics vnc,listen=0.0.0.0
+      --graphics spice
       --cpu host-passthrough
       --noautoconsole
   loop: "{{ cp_vm_exists.results }}"

@@ -44,7 +44,7 @@
       {% endfor %}
       --import
       --network bridge={{ hostvars[item.item.hypervisor].bridge_bm | default(bridge_bm) }},mac={{ item.item.mac }},model=virtio
-      --graphics vnc,listen=0.0.0.0
+      --graphics spice
       --cpu host-model
       --noautoconsole
   loop: "{{ ceph_vm_exists.results }}"
