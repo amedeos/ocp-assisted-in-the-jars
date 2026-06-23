@@ -19,6 +19,10 @@ inventory/group_vars/all/vault.yml
 inventory/group_vars/all/custom.yml
 inventory/group_vars/all/custom-*.yml
 
+# Custom inventory files (contain lab-specific IPs, MACs, hostnames)
+inventory/hosts-*.yml
+!inventory/hosts.yml
+
 # Ansible artifacts
 *.retry
 
