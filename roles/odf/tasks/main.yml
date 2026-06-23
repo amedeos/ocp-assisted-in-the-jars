@@ -12,10 +12,18 @@
   delegate_to: ceph
   no_log: true
 
+- name: Get Ceph admin key
+  ansible.builtin.command: ceph auth get-key client.admin
+  register: ceph_admin_key_result
+  changed_when: false
+  delegate_to: ceph
+  no_log: true
+
 - name: Set Ceph connection facts
   ansible.builtin.set_fact:
     ceph_fsid: "{{ ceph_fsid_result.stdout }}"
     ceph_key: "{{ ceph_key_result.stdout }}"
+    ceph_admin_key: "{{ ceph_admin_key_result.stdout }}"
     ceph_mon_ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"
 
 - name: Create openshift-storage namespace

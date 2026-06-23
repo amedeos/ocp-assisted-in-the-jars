@@ -11,7 +11,7 @@ stringData:
         "name": "rook-ceph-mon-endpoints",
         "kind": "ConfigMap",
         "data": {
-          "data": "{{ ceph_mon_ip }}:6789",
+          "data": "a={{ ceph_mon_ip }}:3300",
           "mapping": "{}",
           "maxMonId": "0"
         }
@@ -20,9 +20,17 @@ stringData:
         "name": "rook-ceph-mon",
         "kind": "Secret",
         "data": {
-          "admin-secret": "admin-secret",
+          "admin-secret": "{{ ceph_admin_key }}",
           "fsid": "{{ ceph_fsid }}",
           "mon-secret": "mon-secret"
+        }
+      },
+      {
+        "name": "rook-ceph-operator-creds",
+        "kind": "Secret",
+        "data": {
+          "userID": "admin",
+          "userKey": "{{ ceph_admin_key }}"
         }
       },
       {
