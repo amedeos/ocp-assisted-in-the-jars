@@ -156,7 +156,7 @@ make vault-encrypt
 
 Variables in vault.yml:
 - `secure_password` -- root password for utility and ceph VMs
-- `rh_subscription_user` / `rh_subscription_password` -- Red Hat portal credentials
-- `rh_subscription_pool` -- RHEL subscription pool ID
+- `rh_activation_key` -- Red Hat activation key ([registration](https://console.redhat.com/insights/registration), [manage keys](https://console.redhat.com/insights/connector/activation-keys))
+- `rh_org_id` -- Red Hat organization ID
 
 Never commit vault files or SSH keys.

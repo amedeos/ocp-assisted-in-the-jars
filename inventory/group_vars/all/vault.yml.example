@@ -5,8 +5,11 @@
 #   make vault-encrypt
 #
 # vault.yml is in .gitignore and will NOT be committed.
+#
+# Create an activation key at:
+#   https://console.redhat.com/insights/registration
+#   https://console.redhat.com/insights/connector/activation-keys
 
 secure_password: "CHANGE_ME"
-rh_subscription_user: "CHANGE_ME"
-rh_subscription_password: "CHANGE_ME"
-rh_subscription_pool: "CHANGE_ME"
+rh_activation_key: "CHANGE_ME"
+rh_org_id: "CHANGE_ME"
