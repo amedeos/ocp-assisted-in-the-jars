@@ -1,11 +1,4 @@
 ---
-- name: Register RHEL subscription
-  community.general.redhat_subscription:
-    activationkey: "{{ rh_activation_key }}"
-    org_id: "{{ rh_org_id }}"
-    state: present
-  no_log: true
-
 - name: Install dnsmasq
   ansible.builtin.dnf:
     name:

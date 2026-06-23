@@ -4,5 +4,7 @@
   become: true
   gather_facts: true
   roles:
+    - role: base_config
+      tags: [configure-utility]
     - role: dnsmasq
       tags: [configure-utility]

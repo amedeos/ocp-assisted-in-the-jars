@@ -4,5 +4,7 @@
   become: true
   gather_facts: true
   roles:
+    - role: base_config
+      tags: [configure-ceph]
     - role: ceph
       tags: [configure-ceph]

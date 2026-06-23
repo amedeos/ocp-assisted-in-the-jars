@@ -1,0 +1,22 @@
+---
+- name: Register RHEL subscription
+  community.general.redhat_subscription:
+    activationkey: "{{ rh_activation_key }}"
+    org_id: "{{ rh_org_id }}"
+    state: present
+  no_log: true
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}.{{ domain }}"
+
+- name: Update all packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+  register: dnf_update
+
+- name: Reboot if kernel was updated
+  ansible.builtin.reboot:
+    reboot_timeout: 300
+  when: dnf_update.changed

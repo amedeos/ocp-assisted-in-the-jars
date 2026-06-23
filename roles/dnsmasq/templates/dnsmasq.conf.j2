@@ -42,7 +42,7 @@ dhcp-range={{ baremetal_net.dhcp_start }},{{ baremetal_net.dhcp_end }},{{ dnsmas
 dhcp-option=option:router,{{ baremetal_net.gateway }}
 dhcp-option=option:dns-server,{{ (cluster_nodes | selectattr('role', 'eq', 'utility') | first).ip }}
 dhcp-option=option:domain-search,{{ domain }}
-dhcp-option=option:ntp-server,{{ baremetal_net.ntp }}
+dhcp-option=42,{{ baremetal_net.ntp }}
 dhcp-option=option:mtu,{{ baremetal_net.mtu }}
 
 # Fixed DHCP leases (MAC -> IP)
