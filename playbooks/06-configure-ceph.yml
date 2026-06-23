@@ -1,6 +1,6 @@
 ---
 - name: Configure single-node Ceph storage
-  hosts: ceph
+  hosts: ceph_vms
   become: true
   gather_facts: true
   roles:
