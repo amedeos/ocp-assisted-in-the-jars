@@ -37,8 +37,8 @@ vip:
   ingress: 192.168.203.81
   ingress_last_octet: 81
 
-# SSH key paths (relative to repo root)
-ssh_key_dir: files/.ssh
+# SSH key paths (anchored to repo root via inventory_dir)
+ssh_key_dir: "{{ inventory_dir }}/../files/.ssh"
 ssh_key_private: "{{ ssh_key_dir }}/id_rsa"
 ssh_key_public: "{{ ssh_key_dir }}/id_rsa.pub"
 

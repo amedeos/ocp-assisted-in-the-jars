@@ -1,4 +1,4 @@
-.PHONY: help deploy preflight create-vms configure-utility configure-ceph \
+.PHONY: help deploy preflight ssh-key create-vms configure-utility configure-ceph \
         boot-control-planes cleanup startup shutdown lint check \
         vault-edit vault-encrypt vault-decrypt collections
 
@@ -26,6 +26,9 @@ collections: ## Install required Ansible Galaxy collections
 
 deploy: ## Run the full deployment (all stages)
 	$(ANSIBLE_CMD) playbooks/site.yml
+
+ssh-key: ## Generate SSH key pair (run before creating cluster on console.redhat.com)
+	$(ANSIBLE_CMD) playbooks/01-create-ssh-key.yml
 
 preflight: ## Run pre-flight validation only (read-only)
 	$(ANSIBLE_CMD) playbooks/preflight.yml
