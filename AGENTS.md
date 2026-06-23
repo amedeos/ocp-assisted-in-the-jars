@@ -25,10 +25,8 @@ make preflight                                         # read-only checks
 make lint                                              # ansible-lint
 make check                                             # dry run
 make cleanup                                           # destroy everything
-make deploy CUSTOM_VARS=/path/to/vars.yml              # custom overrides
-make deploy INVENTORY=/path/to/hosts.yml               # custom inventory
-make deploy INVENTORY=inventory/hosts-lab.yml \
-            CUSTOM_VARS=inventory/lab-vars.yml          # multi-hypervisor with resource overrides
+make deploy INVENTORY=/path/to/hosts.yml \
+            CUSTOM_VARS=/path/to/vars.yml              # multi-hypervisor (both required)
 ```
 
 ## Architecture
@@ -68,14 +66,12 @@ The `hypervisor` field controls which physical host creates the VM
 Two files are needed, both gitignored:
 
 1. **Custom inventory** (`inventory/hosts-*.yml`) -- defines the
-   hypervisor hosts (SSH connection, `image_dir`, `bridge_bm`) and
-   overrides `cluster_nodes` to place each VM on a specific
-   hypervisor.
-2. **Extra-vars file** (`inventory/*-vars.yml`, optional) -- overrides
-   `vm_specs` to change CPU, RAM, or disk per VM role. This must be a
-   separate file passed via `CUSTOM_VARS` because Ansible gives
-   `-e @file` the highest variable precedence, which is needed to
-   override `group_vars/all/main.yml`.
+   hypervisor hosts (SSH connection, `image_dir`, `bridge_bm`).
+2. **Extra-vars file** (`inventory/*-vars.yml`) -- overrides
+   `cluster_nodes` (VM placement) and `vm_specs` (CPU, RAM, disk).
+   This must be a separate file passed via `CUSTOM_VARS` because
+   Ansible gives `-e @file` the highest variable precedence, which
+   is needed to override `group_vars/all/main.yml`.
 
 `.example` templates for both files are provided in `inventory/`.
 

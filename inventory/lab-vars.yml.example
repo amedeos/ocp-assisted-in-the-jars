@@ -6,10 +6,45 @@
 # Copy and customize:
 #   cp inventory/lab-vars.yml.example inventory/lab-vars.yml
 #   # edit lab-vars.yml with your values
-#   make deploy INVENTORY=inventory/hosts-lab.yml CUSTOM_VARS=inventory/lab-vars.yml
+#   make deploy INVENTORY=inventory/hosts-multi.yml CUSTOM_VARS=inventory/lab-vars.yml
 #
 # lab-vars.yml is in .gitignore and will NOT be committed.
 
+# VM placement -- the 'hypervisor' field must match a host under 'hypervisors'
+# in your custom inventory file.
+cluster_nodes:
+  - name: utility
+    role: utility
+    hypervisor: hypervisor02
+    ip: 192.168.203.254
+    ip_last_octet: 254
+    mac: "52:54:00:00:33:FE"
+  - name: ceph
+    role: ceph
+    hypervisor: hypervisor02
+    ip: 192.168.203.252
+    ip_last_octet: 252
+    mac: "52:54:00:00:33:FC"
+  - name: control-plane-0
+    role: control-plane
+    hypervisor: hypervisor01
+    ip: 192.168.203.53
+    ip_last_octet: 53
+    mac: "52:54:00:00:33:00"
+  - name: control-plane-1
+    role: control-plane
+    hypervisor: hypervisor01
+    ip: 192.168.203.54
+    ip_last_octet: 54
+    mac: "52:54:00:00:33:01"
+  - name: control-plane-2
+    role: control-plane
+    hypervisor: hypervisor02
+    ip: 192.168.203.55
+    ip_last_octet: 55
+    mac: "52:54:00:00:33:02"
+
+# VM resources per role (defaults in group_vars/all/main.yml)
 vm_specs:
   utility:
     cpu: 2

@@ -90,7 +90,7 @@
     # ---- RAM ----
     - name: Get total RAM
       ansible.builtin.set_fact:
-        total_ram_mb: "{{ ansible_memtotal_mb }}"
+        total_ram_mb: "{{ ansible_facts['memtotal_mb'] }}"
 
     - name: Calculate required RAM for VMs on this hypervisor
       ansible.builtin.set_fact:

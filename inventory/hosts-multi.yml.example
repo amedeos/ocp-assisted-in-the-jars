@@ -1,21 +1,21 @@
 ---
 # Multi-hypervisor inventory example
 #
-# This file defines hypervisors and VM placement. To override VM resources
-# (CPU, RAM, disk) use a separate extra-vars file -- see lab-vars.yml.example.
+# This file defines hypervisors and VM connection details.
+# VM placement (cluster_nodes) and resource overrides (vm_specs) go in a
+# separate extra-vars file -- see lab-vars.yml.example.
 #
 # Setup:
 #   1. cp hosts-multi.yml.example hosts-multi.yml
-#   2. cp lab-vars.yml.example lab-vars.yml        (optional, for resource overrides)
+#   2. cp lab-vars.yml.example lab-vars.yml
 #   3. Edit both files with your lab values
 #   4. Deploy:
-#        make deploy INVENTORY=inventory/hosts-multi.yml
 #        make deploy INVENTORY=inventory/hosts-multi.yml CUSTOM_VARS=inventory/lab-vars.yml
 #
 # Why two files?
-#   VM resources (vm_specs) are defined in group_vars/all/main.yml. Ansible
-#   variable precedence means inventory vars cannot override group_vars.
-#   CUSTOM_VARS uses -e @file which has the highest precedence.
+#   cluster_nodes and vm_specs are defined in group_vars/all/main.yml.
+#   Ansible variable precedence means inventory vars cannot override
+#   group_vars. CUSTOM_VARS uses -e @file which has the highest precedence.
 #
 # Both hosts-*.yml and *-vars.yml are in .gitignore and will NOT be committed.
 #
@@ -55,37 +55,3 @@ all:
           ansible_ssh_private_key_file: files/.ssh/id_rsa
           ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-  vars:
-    # Override cluster_nodes to assign VMs to specific hypervisors.
-    # The 'hypervisor' field must match a host name under 'hypervisors' above.
-    cluster_nodes:
-      - name: utility
-        role: utility
-        hypervisor: hypervisor02
-        ip: 192.168.203.254
-        ip_last_octet: 254
-        mac: "52:54:00:00:33:FE"
-      - name: ceph
-        role: ceph
-        hypervisor: hypervisor02
-        ip: 192.168.203.252
-        ip_last_octet: 252
-        mac: "52:54:00:00:33:FC"
-      - name: control-plane-0
-        role: control-plane
-        hypervisor: hypervisor01
-        ip: 192.168.203.53
-        ip_last_octet: 53
-        mac: "52:54:00:00:33:00"
-      - name: control-plane-1
-        role: control-plane
-        hypervisor: hypervisor01
-        ip: 192.168.203.54
-        ip_last_octet: 54
-        mac: "52:54:00:00:33:01"
-      - name: control-plane-2
-        role: control-plane
-        hypervisor: hypervisor02
-        ip: 192.168.203.55
-        ip_last_octet: 55
-        mac: "52:54:00:00:33:02"

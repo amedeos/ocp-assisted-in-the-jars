@@ -68,8 +68,8 @@ By default, all VMs are created on `localhost`. To distribute VMs across multipl
 
 | File | What it controls | Why separate |
 |---|---|---|
-| **Custom inventory** (`hosts-*.yml`) | Hypervisor hosts, bridge name, VM placement (`cluster_nodes`) | Defines *who* and *where* |
-| **Extra-vars file** (`*-vars.yml`, optional) | VM resources per role (`vm_specs`: CPU, RAM, disk) | Needs `-e @file` to override `group_vars/all/main.yml` (highest Ansible precedence) |
+| **Custom inventory** (`hosts-*.yml`) | Hypervisor connection details (`bridge_bm`, `image_dir`) | Defines *who connects where* |
+| **Extra-vars file** (`*-vars.yml`) | VM placement (`cluster_nodes`) and resources (`vm_specs`) | Needs `-e @file` to override `group_vars/all/main.yml` (highest Ansible precedence) |
 
 Both are gitignored. Templates are provided in `inventory/`:
 
