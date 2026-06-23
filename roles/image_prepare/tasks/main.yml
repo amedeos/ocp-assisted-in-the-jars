@@ -4,11 +4,32 @@
     msg: "No utility/ceph VMs on {{ inventory_hostname }}, skipping image preparation"
   when: image_prepare_vms | length == 0
 
+- name: Check which golden images already exist
+  ansible.builtin.stat:
+    path: "{{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2"
+  register: golden_image_check
+  loop: "{{ image_prepare_vms }}"
+  loop_control:
+    loop_var: vm
+
+- name: Determine which images need preparation
+  ansible.builtin.set_fact:
+    images_to_prepare: >-
+      {{ golden_image_check.results
+         | selectattr('stat.exists', 'eq', false)
+         | map(attribute='vm')
+         | list }}
+
+- name: Skip if all golden images exist
+  ansible.builtin.debug:
+    msg: "All golden images already exist on {{ inventory_hostname }}, skipping"
+  when: images_to_prepare | length == 0
+
 - name: Check if base image exists locally
   ansible.builtin.stat:
     path: "{{ image_location }}"
   register: base_image_stat
-  when: image_prepare_vms | length > 0
+  when: images_to_prepare | length > 0
 
 - name: Fail if base image not found
   ansible.builtin.assert:
@@ -16,7 +37,7 @@
     fail_msg: >-
       RHEL base image not found at {{ image_location }}.
       Download it from access.redhat.com and place it there.
-  when: image_prepare_vms | length > 0
+  when: images_to_prepare | length > 0
 
 - name: Copy base image to image directory
   ansible.builtin.copy:
@@ -25,11 +46,11 @@
     remote_src: true
     force: false
     mode: "0644"
-  when: image_prepare_vms | length > 0
+  when: images_to_prepare | length > 0
 
 - name: Prepare golden images
   ansible.builtin.include_tasks: prepare_single_image.yml
-  loop: "{{ image_prepare_vms }}"
+  loop: "{{ images_to_prepare }}"
   loop_control:
     loop_var: vm
 
@@ -40,6 +61,7 @@
   delegate_to: localhost
   become: false
   run_once: true
+  when: images_to_prepare | length > 0
 
 - name: Customize golden images
   block:
@@ -51,7 +73,7 @@
           --ssh-inject "root:string:{{ ssh_pub_content.content | b64decode | trim }}"
           --selinux-relabel
           --run-command 'dnf remove cloud-init* -y || true'
-      loop: "{{ image_prepare_vms }}"
+      loop: "{{ images_to_prepare }}"
       loop_control:
         loop_var: vm
       changed_when: true
@@ -61,9 +83,10 @@
     - name: Image customization failed
       ansible.builtin.fail:
         msg: "virt-customize failed. Check that libguestfs-tools is installed."
+  when: images_to_prepare | length > 0
 
 - name: Inject network configuration
   ansible.builtin.include_tasks: inject_network.yml
-  loop: "{{ image_prepare_vms }}"
+  loop: "{{ images_to_prepare }}"
   loop_control:
     loop_var: vm

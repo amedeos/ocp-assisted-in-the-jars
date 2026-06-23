@@ -1,13 +1,22 @@
 ---
+- name: Check if ceph VM already exists
+  ansible.builtin.command: "virsh dominfo {{ item.name }}"
+  register: ceph_vm_exists
+  changed_when: false
+  failed_when: false
+  loop: "{{ ceph_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+
 - name: Copy golden image for ceph VM
   ansible.builtin.copy:
-    src: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/{{ supported_os }}-ceph.qcow2"
-    dest: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/ceph.qcow2"
+    src: "{{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/{{ supported_os }}-ceph.qcow2"
+    dest: "{{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/ceph.qcow2"
     remote_src: true
     force: false
     mode: "0644"
-  loop: "{{ ceph_nodes }}"
-  delegate_to: "{{ item.hypervisor }}"
+  loop: "{{ ceph_vm_exists.results }}"
+  when: item.rc != 0
+  delegate_to: "{{ item.item.hypervisor }}"
 
 - name: Create OSD disks for ceph VM
   ansible.builtin.command:
@@ -21,14 +30,6 @@
     index_var: idx
   delegate_to: "{{ item.0.hypervisor }}"
   changed_when: true
-
-- name: Check if ceph VM already exists
-  ansible.builtin.command: "virsh dominfo {{ item.name }}"
-  register: ceph_vm_exists
-  changed_when: false
-  failed_when: false
-  loop: "{{ ceph_nodes }}"
-  delegate_to: "{{ item.hypervisor }}"
 
 - name: Create ceph VM with virt-install
   ansible.builtin.command:

@@ -1,14 +1,4 @@
 ---
-- name: Copy golden image for utility VM
-  ansible.builtin.copy:
-    src: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/{{ supported_os }}-utility.qcow2"
-    dest: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/utility.qcow2"
-    remote_src: true
-    force: false
-    mode: "0644"
-  loop: "{{ utility_nodes }}"
-  delegate_to: "{{ item.hypervisor }}"
-
 - name: Check if utility VM already exists
   ansible.builtin.command: "virsh dominfo {{ item.name }}"
   register: utility_vm_exists
@@ -16,6 +6,17 @@
   failed_when: false
   loop: "{{ utility_nodes }}"
   delegate_to: "{{ item.hypervisor }}"
+
+- name: Copy golden image for utility VM
+  ansible.builtin.copy:
+    src: "{{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/{{ supported_os }}-utility.qcow2"
+    dest: "{{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/utility.qcow2"
+    remote_src: true
+    force: false
+    mode: "0644"
+  loop: "{{ utility_vm_exists.results }}"
+  when: item.rc != 0
+  delegate_to: "{{ item.item.hypervisor }}"
 
 - name: Create utility VM with virt-install
   ansible.builtin.command:

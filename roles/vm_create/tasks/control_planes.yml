@@ -1,15 +1,4 @@
 ---
-- name: Create empty OS disks for control-plane VMs
-  ansible.builtin.command:
-    cmd: >-
-      qemu-img create -f qcow2 -o preallocation=metadata
-      {{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/{{ item.name }}.qcow2
-      {{ vm_specs.controlplane.os_disk_gb }}G
-    creates: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}/{{ item.name }}.qcow2"
-  loop: "{{ controlplane_nodes }}"
-  delegate_to: "{{ item.hypervisor }}"
-  changed_when: true
-
 - name: Check if control-plane VMs already exist
   ansible.builtin.command: "virsh dominfo {{ item.name }}"
   register: cp_vm_exists
@@ -17,6 +6,18 @@
   failed_when: false
   loop: "{{ controlplane_nodes }}"
   delegate_to: "{{ item.hypervisor }}"
+
+- name: Create empty OS disks for control-plane VMs
+  ansible.builtin.command:
+    cmd: >-
+      qemu-img create -f qcow2 -o preallocation=metadata
+      {{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/{{ item.item.name }}.qcow2
+      {{ vm_specs.controlplane.os_disk_gb }}G
+    creates: "{{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/{{ item.item.name }}.qcow2"
+  loop: "{{ cp_vm_exists.results }}"
+  when: item.rc != 0
+  delegate_to: "{{ item.item.hypervisor }}"
+  changed_when: true
 
 - name: Create control-plane VMs with virt-install
   ansible.builtin.command:
