@@ -12,6 +12,12 @@
       ansible.builtin.set_fact:
         ceph_mon_ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"
 
+    - name: Create podman auth directory
+      ansible.builtin.file:
+        path: /run/containers/0
+        state: directory
+        mode: "0700"
+
     - name: Copy pull secret to ceph VM
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/pull-secret.txt"
