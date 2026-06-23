@@ -15,7 +15,7 @@
     - name: Copy pull secret to ceph VM
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/pull-secret.txt"
-        dest: /root/pull-secret.txt
+        dest: /run/containers/0/auth.json
         mode: "0600"
 
     - name: Run cephadm bootstrap
@@ -25,7 +25,6 @@
           --single-host-defaults
           --allow-fqdn-hostname
           --mon-ip {{ ceph_mon_ip }}
-          --registry-json /root/pull-secret.txt
           {% if not ceph_config.dashboard_enabled | bool %}--skip-dashboard{% endif %}
           --skip-monitoring-stack
       register: ceph_bootstrap
