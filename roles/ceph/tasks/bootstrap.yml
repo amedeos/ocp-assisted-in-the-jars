@@ -17,6 +17,7 @@
         cmd: >-
           cephadm bootstrap
           --single-host-defaults
+          --allow-fqdn-hostname
           --mon-ip {{ ceph_mon_ip }}
           {% if not ceph_config.dashboard_enabled | bool %}--skip-dashboard{% endif %}
           --skip-monitoring-stack
