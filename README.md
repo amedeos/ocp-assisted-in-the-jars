@@ -121,27 +121,33 @@ Only include the roles you want to override; defaults for the rest come from `in
 |---|---|
 | `make deploy` | Full deployment |
 | `make preflight` | Read-only pre-flight checks |
-| `make create-vms` | Create VMs only |
-| `make configure-utility` | Configure dnsmasq |
-| `make configure-ceph` | Bootstrap Ceph |
+| `make ssh-key` | Generate SSH key pair |
+| `make ssh-config` | Add VM entries to ~/.ssh/config |
+| `make create-utility` | Create utility VM only |
+| `make create-vms` | Create ceph and control-plane VMs |
+| `make configure-utility` | Configure dnsmasq (DNS+DHCP) |
+| `make configure-ceph` | Bootstrap Ceph with 3 OSDs |
 | `make boot-control-planes` | Start control-planes from ISO |
-| `make cleanup` | Destroy everything |
+| `make cleanup` | Destroy everything and remove SSH config |
 | `make startup` | Start all VMs |
 | `make shutdown` | Graceful shutdown |
 | `make lint` | Lint and syntax check |
 | `make check` | Dry run |
 | `make vault-edit` | Edit encrypted vault |
+| `make pull-secret-encrypt` | Encrypt pull secret |
+| `make pull-secret-decrypt` | Decrypt pull secret |
 
 ## Execution flow
 
 1. **preflight** -- validates prerequisites (read-only)
-2. **01-create-ssh-key** -- generates SSH key pair
-3. **02-prepare-hypervisor** -- iptables NAT/DNAT, nested virt
-4. **03-prepare-images** -- downloads and customizes RHEL 10 images
-5. **04-create-vms** -- creates all VMs in libvirt
-6. **05-configure-utility** -- installs and configures dnsmasq
-7. **06-configure-ceph** -- bootstraps Ceph, adds 3 OSDs, creates pool
-8. **07-boot-control-planes** -- starts control-plane VMs from discovery ISO
+2. **01-create-ssh-key** -- generates ed25519 SSH key pair
+3. **03-prepare-images** -- customizes RHEL 10 golden images (utility, ceph)
+4. **04a-create-utility** -- creates utility VM with virt-install
+5. **04c-ssh-config** -- adds VM entries to ~/.ssh/config
+6. **05-configure-utility** -- base config (subscription, hostname, updates) + dnsmasq
+7. **04b-create-remaining-vms** -- creates ceph and control-plane VMs
+8. **06-configure-ceph** -- base config + bootstraps Ceph, adds 3 OSDs, creates pool
+9. **07-boot-control-planes** -- starts control-plane VMs from discovery ISO
 
 After step 8, continue the installation from [console.redhat.com](https://console.redhat.com/openshift/assisted-installer/clusters).
 
