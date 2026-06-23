@@ -61,7 +61,6 @@
   delegate_to: localhost
   become: false
   run_once: true
-  when: images_to_prepare | length > 0
 
 - name: Customize golden images
   block:
