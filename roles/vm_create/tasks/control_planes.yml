@@ -10,29 +10,30 @@
   delegate_to: "{{ item.hypervisor }}"
   changed_when: true
 
-- name: Generate libvirt XML for control-plane VMs
-  ansible.builtin.template:
-    src: vm-domain.xml.j2
-    dest: "/tmp/{{ item.name }}.xml"
-    mode: "0600"
-  vars:
-    vm_name: "{{ item.name }}"
-    vm_cpu: "{{ vm_specs.controlplane.cpu }}"
-    vm_memory_mb: "{{ vm_specs.controlplane.memory_mb }}"
-    vm_cpu_mode: "host-passthrough"
-    vm_mac: "{{ item.mac }}"
-    vm_image_dir: "{{ hostvars[item.hypervisor].image_dir | default(image_dir) }}"
-    vm_bridge: "{{ hostvars[item.hypervisor].bridge_bm | default(bridge_bm) }}"
-    vm_osd_disks: []
-    vm_boot_cdrom: true
+- name: Check if control-plane VMs already exist
+  ansible.builtin.command: "virsh dominfo {{ item.name }}"
+  register: cp_vm_exists
+  changed_when: false
+  failed_when: false
   loop: "{{ controlplane_nodes }}"
   delegate_to: "{{ item.hypervisor }}"
 
-- name: Define control-plane VMs in libvirt
+- name: Create control-plane VMs with virt-install
   ansible.builtin.command:
-    cmd: "virsh define /tmp/{{ item.name }}.xml"
-  register: virsh_define_cp
-  changed_when: "'defined' in virsh_define_cp.stdout"
-  failed_when: virsh_define_cp.rc != 0 and 'already exists' not in virsh_define_cp.stderr
-  loop: "{{ controlplane_nodes }}"
-  delegate_to: "{{ item.hypervisor }}"
+    cmd: >-
+      virt-install
+      --name {{ item.item.name }}
+      --os-variant {{ vm_specs.controlplane.os_variant }}
+      --vcpus {{ vm_specs.controlplane.cpu }}
+      --memory {{ vm_specs.controlplane.memory_mb }}
+      --disk path={{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/{{ item.item.name }}.qcow2
+      --cdrom {{ assisted.discovery_iso_path }}
+      --boot cdrom,hd
+      --network bridge={{ hostvars[item.item.hypervisor].bridge_bm | default(bridge_bm) }},mac={{ item.item.mac }},model=virtio
+      --graphics vnc,listen=0.0.0.0
+      --cpu host-passthrough
+      --noautoconsole
+  loop: "{{ cp_vm_exists.results }}"
+  when: item.rc != 0
+  delegate_to: "{{ item.item.hypervisor }}"
+  changed_when: true

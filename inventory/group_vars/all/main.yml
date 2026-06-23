@@ -11,8 +11,6 @@ ocp_version: "4.22"
 supported_os: rhel10
 image: rhel-10.2-x86_64-kvm.qcow2
 image_location: /root/images/rhel-10.2-x86_64-kvm.qcow2
-virt_os_variant: rhel10.2
-
 # Network - single baremetal network (bridge is a manual prerequisite)
 bridge_bm: bm
 
@@ -51,10 +49,12 @@ vm_specs:
     cpu: 2
     memory_mb: 4096
     os_disk_gb: 50
+    os_variant: rhel10.0
   ceph:
     cpu: 4
     memory_mb: 16384
     os_disk_gb: 50
+    os_variant: rhel10.0
     osd_disks:
       - size_gb: 200
         device: vdb
@@ -66,6 +66,7 @@ vm_specs:
     cpu: 16
     memory_mb: 65536
     os_disk_gb: 120
+    os_variant: rhel9.6
 
 # Assisted Installer
 assisted:
