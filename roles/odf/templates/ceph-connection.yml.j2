@@ -1,9 +1,10 @@
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: rook-ceph-external-cluster-details
   namespace: {{ odf_namespace }}
-data:
+type: Opaque
+stringData:
   external_cluster_details: |
     [
       {

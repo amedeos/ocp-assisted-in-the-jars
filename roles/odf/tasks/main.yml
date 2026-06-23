@@ -51,7 +51,7 @@
   delay: 15
   changed_when: false
 
-- name: Apply Ceph connection ConfigMap
+- name: Apply Ceph connection secret
   ansible.builtin.shell:
     cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} apply -f -"
     stdin: "{{ lookup('template', 'ceph-connection.yml.j2') }}"

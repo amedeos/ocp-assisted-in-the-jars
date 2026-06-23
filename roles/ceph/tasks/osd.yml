@@ -46,6 +46,13 @@
   changed_when: "'enabled' in rbd_enable.stdout"
   failed_when: rbd_enable.rc != 0 and 'already' not in rbd_enable.stderr
 
+- name: Enable Ceph prometheus module for ODF monitoring
+  ansible.builtin.command:
+    cmd: ceph mgr module enable prometheus
+  register: prometheus_enable
+  changed_when: "'already' not in prometheus_enable.stderr"
+  failed_when: prometheus_enable.rc != 0 and 'already' not in prometheus_enable.stderr
+
 - name: Create CephX credentials for OpenShift ODF
   ansible.builtin.command:
     cmd: >-
