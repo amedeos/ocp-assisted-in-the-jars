@@ -1,0 +1,10 @@
+---
+- name: Create utility VM
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  run_once: true
+  tasks:
+    - name: Create utility VM
+      ansible.builtin.include_tasks: "../roles/vm_create/tasks/utility.yml"
+      tags: [create-utility]

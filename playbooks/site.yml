@@ -11,13 +11,17 @@
   ansible.builtin.import_playbook: 03-prepare-images.yml
   tags: [images]
 
-- name: Create all VMs
-  ansible.builtin.import_playbook: 04-create-vms.yml
-  tags: [create-vms]
+- name: Create utility VM
+  ansible.builtin.import_playbook: 04a-create-utility.yml
+  tags: [create-utility]
 
 - name: Configure utility (DNS + DHCP)
   ansible.builtin.import_playbook: 05-configure-utility.yml
   tags: [configure-utility]
+
+- name: Create ceph and control-plane VMs
+  ansible.builtin.import_playbook: 04b-create-remaining-vms.yml
+  tags: [create-vms]
 
 - name: Configure Ceph storage
   ansible.builtin.import_playbook: 06-configure-ceph.yml

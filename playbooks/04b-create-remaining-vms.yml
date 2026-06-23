@@ -1,0 +1,14 @@
+---
+- name: Create ceph and control-plane VMs
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  run_once: true
+  tasks:
+    - name: Create ceph VM
+      ansible.builtin.include_tasks: "../roles/vm_create/tasks/ceph.yml"
+      tags: [create-vms]
+
+    - name: Create control-plane VMs
+      ansible.builtin.include_tasks: "../roles/vm_create/tasks/control_planes.yml"
+      tags: [create-vms]
