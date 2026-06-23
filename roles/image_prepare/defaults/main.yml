@@ -6,10 +6,12 @@ image_prepare_all_vms:
     role: utility
     disk_gb: "{{ vm_specs.utility.os_disk_gb }}"
     ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'utility') | first).ip }}"
+    mac: "{{ (cluster_nodes | selectattr('role', 'eq', 'utility') | first).mac }}"
   - name: ceph
     role: ceph
     disk_gb: "{{ vm_specs.ceph.os_disk_gb }}"
     ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"
+    mac: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).mac }}"
 
 image_prepare_vms: >-
   {{ image_prepare_all_vms

@@ -7,12 +7,11 @@
 
 - name: Generate network config for {{ vm.name }}
   ansible.builtin.copy:
-    dest: "{{ netcfg_dir.path }}/eth0.nmconnection"
+    dest: "{{ netcfg_dir.path }}/baremetal.nmconnection"
     content: |
       [connection]
-      id=eth0
+      id=baremetal
       type=ethernet
-      interface-name=eth0
       autoconnect=true
 
       [ipv4]
@@ -23,6 +22,7 @@
       dns-search={{ domain }}
 
       [ethernet]
+      mac-address={{ vm.mac }}
       mtu={{ baremetal_net.mtu }}
     mode: "0600"
 
@@ -30,7 +30,7 @@
   ansible.builtin.command:
     cmd: >-
       virt-copy-in -a {{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2
-      {{ netcfg_dir.path }}/eth0.nmconnection
+      {{ netcfg_dir.path }}/baremetal.nmconnection
       /etc/NetworkManager/system-connections/
   changed_when: true
 
