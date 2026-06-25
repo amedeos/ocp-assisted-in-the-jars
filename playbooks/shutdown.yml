@@ -3,13 +3,50 @@
   hosts: utility_vms
   become: true
   gather_facts: false
+  vars:
+    shutdown_kubeconfig_path: /root/kubeconfig-int
+    shutdown_kubeconfig_src: /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/lb-int.kubeconfig
   tasks:
+    - name: Check if kubeconfig exists
+      ansible.builtin.stat:
+        path: "{{ shutdown_kubeconfig_path }}"
+      register: shutdown_kubeconfig_stat
+
+    - name: Fetch kubeconfig from control-plane-0 if missing
+      when: not shutdown_kubeconfig_stat.stat.exists
+      block:
+        - name: Copy SSH key for control-plane access
+          ansible.builtin.copy:
+            src: "{{ ssh_key_private }}"
+            dest: /root/.ssh/cp_key
+            mode: "0600"
+
+        - name: Fetch kubeconfig via SSH
+          ansible.builtin.command:
+            cmd: >-
+              ssh -i /root/.ssh/cp_key
+              -o StrictHostKeyChecking=no
+              -o UserKnownHostsFile=/dev/null
+              -o ConnectTimeout=10
+              core@{{ (controlplane_nodes | first).ip }}
+              sudo cat {{ shutdown_kubeconfig_src }}
+          register: shutdown_kubeconfig_fetch
+          changed_when: false
+          no_log: true
+
+        - name: Save kubeconfig
+          ansible.builtin.copy:
+            content: "{{ shutdown_kubeconfig_fetch.stdout }}"
+            dest: "{{ shutdown_kubeconfig_path }}"
+            mode: "0600"
+          no_log: true
+
     - name: Pre-pull debug image on all nodes
       ansible.builtin.shell:
         cmd: >-
-          for node in $(oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+          for node in $(oc --kubeconfig {{ shutdown_kubeconfig_path }}
           get nodes -o jsonpath='{.items[*].metadata.name}'); do
-            oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+            oc --kubeconfig {{ shutdown_kubeconfig_path }}
             debug node/${node} -- chroot /host echo ready;
           done
       changed_when: false
@@ -19,9 +56,9 @@
     - name: Schedule shutdown on all OpenShift nodes
       ansible.builtin.shell:
         cmd: >-
-          for node in $(oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+          for node in $(oc --kubeconfig {{ shutdown_kubeconfig_path }}
           get nodes -o jsonpath='{.items[*].metadata.name}'); do
-            oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+            oc --kubeconfig {{ shutdown_kubeconfig_path }}
             debug node/${node} -- chroot /host shutdown -h 2;
           done
       changed_when: true
