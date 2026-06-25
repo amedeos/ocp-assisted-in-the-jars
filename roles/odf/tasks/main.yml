@@ -104,6 +104,19 @@
   delay: 15
   changed_when: false
 
+- name: Enable ODF console plugin
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ odf_kubeconfig_path }}
+      patch console.operator.openshift.io cluster
+      --type json
+      --patch '[{"op": "add", "path": "/spec/plugins/-", "value": "odf-console"}]'
+  register: odf_console_plugin
+  changed_when: "'patched' in odf_console_plugin.stdout"
+  failed_when: >-
+    odf_console_plugin.rc != 0 and
+    'already exists' not in odf_console_plugin.stderr | default('')
+
 - name: Display StorageClasses
   ansible.builtin.command:
     cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} get sc"
