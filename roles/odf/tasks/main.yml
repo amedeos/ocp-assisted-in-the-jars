@@ -1,115 +1,115 @@
 ---
 - name: Get Ceph FSID
   ansible.builtin.command: ceph fsid
-  register: ceph_fsid_result
+  register: odf_ceph_fsid_result
   changed_when: false
   delegate_to: ceph
 
 - name: Get CephX key for OpenShift
-  ansible.builtin.command: "ceph auth get-key {{ ceph_client_name }}"
-  register: ceph_key_result
+  ansible.builtin.command: "ceph auth get-key {{ odf_ceph_client_name }}"
+  register: odf_ceph_key_result
   changed_when: false
   delegate_to: ceph
   no_log: true
 
 - name: Get Ceph admin key
   ansible.builtin.command: ceph auth get-key client.admin
-  register: ceph_admin_key_result
+  register: odf_ceph_admin_key_result
   changed_when: false
   delegate_to: ceph
   no_log: true
 
 - name: Set Ceph connection facts
   ansible.builtin.set_fact:
-    ceph_fsid: "{{ ceph_fsid_result.stdout }}"
-    ceph_key: "{{ ceph_key_result.stdout }}"
-    ceph_admin_key: "{{ ceph_admin_key_result.stdout }}"
-    ceph_mon_ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"
+    odf_ceph_fsid: "{{ odf_ceph_fsid_result.stdout }}"
+    odf_ceph_key: "{{ odf_ceph_key_result.stdout }}"
+    odf_ceph_admin_key: "{{ odf_ceph_admin_key_result.stdout }}"
+    odf_ceph_mon_ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"
 
 - name: Create openshift-storage namespace
   ansible.builtin.command:
-    cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} create namespace {{ odf_namespace }}"
-  register: ns_create
-  changed_when: "'created' in ns_create.stdout"
-  failed_when: ns_create.rc != 0 and 'already exists' not in ns_create.stderr
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} create namespace {{ odf_namespace }}"
+  register: odf_ns_create
+  changed_when: "'created' in odf_ns_create.stdout"
+  failed_when: odf_ns_create.rc != 0 and 'already exists' not in odf_ns_create.stderr
 
 - name: Apply OperatorGroup
-  ansible.builtin.shell:
-    cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} apply -f -"
+  ansible.builtin.command:
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} apply -f -"
     stdin: "{{ lookup('template', 'operator-group.yml.j2') }}"
-  register: og_apply
-  changed_when: "'created' in og_apply.stdout or 'configured' in og_apply.stdout"
+  register: odf_og_apply
+  changed_when: "'created' in odf_og_apply.stdout or 'configured' in odf_og_apply.stdout"
 
 - name: Apply Subscription
-  ansible.builtin.shell:
-    cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} apply -f -"
+  ansible.builtin.command:
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} apply -f -"
     stdin: "{{ lookup('template', 'subscription.yml.j2') }}"
-  register: sub_apply
-  changed_when: "'created' in sub_apply.stdout or 'configured' in sub_apply.stdout"
+  register: odf_sub_apply
+  changed_when: "'created' in odf_sub_apply.stdout or 'configured' in odf_sub_apply.stdout"
 
 - name: Wait for ODF operator to be ready
-  ansible.builtin.shell:
+  ansible.builtin.command:
     cmd: >-
-      oc --kubeconfig {{ ocp_kubeconfig_path }}
+      oc --kubeconfig {{ odf_kubeconfig_path }}
       get csv -n {{ odf_namespace }}
       -o jsonpath='{.items[?(@.spec.displayName=="OpenShift Data Foundation")].status.phase}'
-  register: csv_status
-  until: csv_status.stdout == 'Succeeded'
+  register: odf_csv_status
+  until: odf_csv_status.stdout == 'Succeeded'
   retries: 60
   delay: 15
   changed_when: false
 
 - name: Apply Ceph connection secret
-  ansible.builtin.shell:
-    cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} apply -f -"
+  ansible.builtin.command:
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} apply -f -"
     stdin: "{{ lookup('template', 'ceph-connection.yml.j2') }}"
-  register: conn_apply
-  changed_when: "'created' in conn_apply.stdout or 'configured' in conn_apply.stdout"
+  register: odf_conn_apply
+  changed_when: "'created' in odf_conn_apply.stdout or 'configured' in odf_conn_apply.stdout"
   no_log: true
 
 - name: Apply Ceph RBD secrets
-  ansible.builtin.shell:
-    cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} apply -f -"
+  ansible.builtin.command:
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} apply -f -"
     stdin: "{{ lookup('template', 'ceph-rbd-secret.yml.j2') }}"
-  register: secret_apply
-  changed_when: "'created' in secret_apply.stdout or 'configured' in secret_apply.stdout"
+  register: odf_secret_apply
+  changed_when: "'created' in odf_secret_apply.stdout or 'configured' in odf_secret_apply.stdout"
   no_log: true
 
 - name: Wait for StorageCluster CRD to be available
   ansible.builtin.command:
-    cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} get crd storageclusters.ocs.openshift.io"
-  register: crd_check
-  until: crd_check.rc == 0
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} get crd storageclusters.ocs.openshift.io"
+  register: odf_crd_check
+  until: odf_crd_check.rc == 0
   retries: 60
   delay: 15
   changed_when: false
 
 - name: Apply StorageCluster (external mode)
-  ansible.builtin.shell:
-    cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} apply -f -"
+  ansible.builtin.command:
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} apply -f -"
     stdin: "{{ lookup('template', 'storage-cluster.yml.j2') }}"
-  register: sc_apply
-  changed_when: "'created' in sc_apply.stdout or 'configured' in sc_apply.stdout"
+  register: odf_sc_apply
+  changed_when: "'created' in odf_sc_apply.stdout or 'configured' in odf_sc_apply.stdout"
 
 - name: Wait for StorageCluster to be ready
-  ansible.builtin.shell:
+  ansible.builtin.command:
     cmd: >-
-      oc --kubeconfig {{ ocp_kubeconfig_path }}
+      oc --kubeconfig {{ odf_kubeconfig_path }}
       get storagecluster ocs-external-storagecluster
       -n {{ odf_namespace }}
       -o jsonpath='{.status.phase}'
-  register: sc_status
-  until: sc_status.stdout == 'Ready'
+  register: odf_sc_status
+  until: odf_sc_status.stdout == 'Ready'
   retries: 60
   delay: 15
   changed_when: false
 
 - name: Display StorageClasses
   ansible.builtin.command:
-    cmd: "oc --kubeconfig {{ ocp_kubeconfig_path }} get sc"
-  register: storage_classes
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} get sc"
+  register: odf_storage_classes
   changed_when: false
 
 - name: Show available StorageClasses
   ansible.builtin.debug:
-    var: storage_classes.stdout_lines
+    var: odf_storage_classes.stdout_lines

@@ -35,10 +35,12 @@ vip:
   ingress: 192.168.203.81
   ingress_last_octet: 81
 
-# SSH key paths (anchored to repo root via playbook_dir)
-ssh_key_dir: "{{ playbook_dir }}/../files/.ssh"
+# File paths (anchored to repo root via playbook_dir)
+files_dir: "{{ playbook_dir }}/../files"
+ssh_key_dir: "{{ files_dir }}/.ssh"
 ssh_key_private: "{{ ssh_key_dir }}/id_rsa"
 ssh_key_public: "{{ ssh_key_dir }}/id_rsa.pub"
+pull_secret_path: "{{ files_dir }}/pull-secret.txt"
 
 # Default image storage directory
 image_dir: /var/lib/libvirt/images

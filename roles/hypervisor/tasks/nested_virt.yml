@@ -1,13 +1,13 @@
 ---
 - name: Detect CPU vendor
   ansible.builtin.command: grep -m1 -oP '(Intel|AMD)' /proc/cpuinfo
-  register: cpu_vendor_raw
+  register: hypervisor_cpu_vendor
   changed_when: false
-  failed_when: cpu_vendor_raw.rc != 0
+  failed_when: hypervisor_cpu_vendor.rc != 0
 
 - name: Set KVM module name
   ansible.builtin.set_fact:
-    kvm_module: "{{ 'kvm_intel' if 'Intel' in cpu_vendor_raw.stdout else 'kvm_amd' }}"
+    hypervisor_kvm_module: "{{ 'kvm_intel' if 'Intel' in hypervisor_cpu_vendor.stdout else 'kvm_amd' }}"
 
 - name: Configure nested virtualization in modprobe
   ansible.builtin.template:
@@ -16,8 +16,8 @@
     mode: "0644"
 
 - name: Check if nested virtualization is active
-  ansible.builtin.command: "cat /sys/module/{{ kvm_module }}/parameters/nested"
-  register: nested_status
+  ansible.builtin.command: "cat /sys/module/{{ hypervisor_kvm_module }}/parameters/nested"
+  register: hypervisor_nested_status
   changed_when: false
   failed_when: false
 
@@ -26,4 +26,4 @@
     msg: >-
       Nested virtualization is configured but not active.
       A reboot or module reload is required.
-  when: nested_status.stdout | default('') not in ['1', 'Y']
+  when: hypervisor_nested_status.stdout | default('') not in ['1', 'Y']

@@ -20,7 +20,7 @@
 
     - name: Copy pull secret as podman auth
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/pull-secret.txt"
+        src: "{{ pull_secret_path }}"
         dest: /root/.config/containers/auth.json
         mode: "0600"
 

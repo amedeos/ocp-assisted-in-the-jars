@@ -13,7 +13,7 @@
     dest: /etc/dnsmasq.conf
     mode: "0644"
     backup: true
-  notify: restart_dnsmasq
+  notify: Restart dnsmasq
 
 - name: Enable and start dnsmasq
   ansible.builtin.systemd:

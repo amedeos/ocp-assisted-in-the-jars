@@ -1,7 +1,7 @@
 ---
 - name: Check if utility VM already exists
   ansible.builtin.command: "virsh dominfo {{ item.name }}"
-  register: utility_vm_exists
+  register: vm_create_utility_exists
   changed_when: false
   failed_when: false
   loop: "{{ utility_nodes }}"
@@ -14,7 +14,7 @@
     remote_src: true
     force: false
     mode: "0644"
-  loop: "{{ utility_vm_exists.results }}"
+  loop: "{{ vm_create_utility_exists.results }}"
   when: item.rc != 0
   delegate_to: "{{ item.item.hypervisor }}"
 
@@ -32,7 +32,7 @@
       --graphics spice
       --cpu host-model
       --noautoconsole
-  loop: "{{ utility_vm_exists.results }}"
+  loop: "{{ vm_create_utility_exists.results }}"
   when: item.rc != 0
   delegate_to: "{{ item.item.hypervisor }}"
   changed_when: true

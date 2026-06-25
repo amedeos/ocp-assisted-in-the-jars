@@ -10,13 +10,8 @@
   ansible.builtin.hostname:
     name: "{{ inventory_hostname }}.{{ domain }}"
 
-- name: Update all packages
+- name: Update all packages  # noqa: package-latest
   ansible.builtin.dnf:
     name: "*"
     state: latest
-  register: dnf_update
-
-- name: Reboot if kernel was updated
-  ansible.builtin.reboot:
-    reboot_timeout: 300
-  when: dnf_update.changed
+  notify: Reboot after update

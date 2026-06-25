@@ -104,3 +104,6 @@ credentials.
 5. **Never restart services inline** -- use handlers with `notify:`.
 6. **Never hardcode IPs** -- use variables from `cluster_nodes` or
    `baremetal_net`.
+7. **Run `make lint` after every change** to playbooks or roles.
+   It must pass with zero errors before committing. CI enforces
+   this via GitHub Actions (ansible-lint + yamllint + syntax-check).

@@ -1,5 +1,5 @@
 ---
-image_expand_partition: /dev/sda3
+image_prepare_expand_partition: /dev/sda3
 
 image_prepare_all_vms:
   - name: utility

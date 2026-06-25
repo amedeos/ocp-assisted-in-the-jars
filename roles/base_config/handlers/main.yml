@@ -1,0 +1,5 @@
+---
+- name: Reboot after update
+  ansible.builtin.reboot:
+    reboot_timeout: 300
+  listen: Reboot after update

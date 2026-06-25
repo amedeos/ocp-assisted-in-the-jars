@@ -1,31 +1,31 @@
 ---
-- name: Check if golden image for {{ vm.name }} already exists
+- name: Check if golden image already exists — {{ vm.name }}
   ansible.builtin.stat:
     path: "{{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2"
-  register: golden_image_stat
+  register: image_prepare_golden_stat
 
-- name: Create empty disk for {{ vm.name }}
+- name: Create empty disk — {{ vm.name }}
   ansible.builtin.command:
     cmd: >-
       qemu-img create -f qcow2 -o preallocation=metadata
       {{ image_dir }}/{{ supported_os }}-{{ vm.name }}-empty.qcow2
       {{ vm.disk_gb }}G
-  when: not golden_image_stat.stat.exists
+  when: not image_prepare_golden_stat.stat.exists
   changed_when: true
 
-- name: Expand base image into golden image for {{ vm.name }}
+- name: Expand base image into golden image — {{ vm.name }}
   ansible.builtin.command:
     cmd: >-
-      virt-resize --expand {{ image_expand_partition }}
+      virt-resize --expand {{ image_prepare_expand_partition }}
       {{ image_dir }}/{{ supported_os }}-base.qcow2
       {{ image_dir }}/{{ supported_os }}-{{ vm.name }}-empty.qcow2
-  when: not golden_image_stat.stat.exists
+  when: not image_prepare_golden_stat.stat.exists
   changed_when: true
 
-- name: Rename expanded image to golden image for {{ vm.name }}
+- name: Rename expanded image to golden image — {{ vm.name }}
   ansible.builtin.command:
     cmd: >-
       mv {{ image_dir }}/{{ supported_os }}-{{ vm.name }}-empty.qcow2
       {{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2
-  when: not golden_image_stat.stat.exists
+  when: not image_prepare_golden_stat.stat.exists
   changed_when: true

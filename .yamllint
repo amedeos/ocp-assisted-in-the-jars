@@ -1,0 +1,14 @@
+---
+extends: default
+
+ignore:
+  - inventory/group_vars/all/vault.yml
+  - .github/
+
+rules:
+  line-length:
+    max: 200
+  truthy:
+    allowed-values: ["true", "false", "yes", "no"]
+  comments:
+    min-spaces-from-content: 1

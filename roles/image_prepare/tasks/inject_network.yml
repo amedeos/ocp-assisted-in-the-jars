@@ -3,11 +3,11 @@
   ansible.builtin.tempfile:
     state: directory
     prefix: netcfg_
-  register: netcfg_dir
+  register: image_prepare_netcfg_dir
 
-- name: Generate network config for {{ vm.name }}
+- name: Generate network config — {{ vm.name }}
   ansible.builtin.copy:
-    dest: "{{ netcfg_dir.path }}/baremetal.nmconnection"
+    dest: "{{ image_prepare_netcfg_dir.path }}/baremetal.nmconnection"
     content: |
       [connection]
       id=baremetal
@@ -26,15 +26,15 @@
       mtu={{ baremetal_net.mtu }}
     mode: "0600"
 
-- name: Inject network config into {{ vm.name }} image
+- name: Inject network config into image — {{ vm.name }}
   ansible.builtin.command:
     cmd: >-
       virt-copy-in -a {{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2
-      {{ netcfg_dir.path }}/baremetal.nmconnection
+      {{ image_prepare_netcfg_dir.path }}/baremetal.nmconnection
       /etc/NetworkManager/system-connections/
   changed_when: true
 
 - name: Cleanup temp directory
   ansible.builtin.file:
-    path: "{{ netcfg_dir.path }}"
+    path: "{{ image_prepare_netcfg_dir.path }}"
     state: absent

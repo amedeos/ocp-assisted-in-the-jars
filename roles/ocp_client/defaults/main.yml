@@ -1,4 +1,4 @@
 ---
 ocp_client_url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-{{ ocp_version }}/openshift-client-linux.tar.gz"
-ocp_kubeconfig_path: /root/kubeconfig-int
-ocp_kubeconfig_src: /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/lb-int.kubeconfig
+ocp_client_kubeconfig_path: /root/kubeconfig-int
+ocp_client_kubeconfig_src: /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/lb-int.kubeconfig

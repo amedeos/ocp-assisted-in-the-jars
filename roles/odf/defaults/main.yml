@@ -3,5 +3,5 @@ odf_namespace: openshift-storage
 odf_channel: "stable-4.21"
 odf_catalog_source: redhat-operators
 odf_operator_name: odf-operator
-ceph_client_name: client.openshift
-ocp_kubeconfig_path: /root/kubeconfig-int
+odf_ceph_client_name: client.openshift
+odf_kubeconfig_path: /root/kubeconfig-int

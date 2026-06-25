@@ -1,7 +1,7 @@
 ---
 - name: Check if ceph VM already exists
   ansible.builtin.command: "virsh dominfo {{ item.name }}"
-  register: ceph_vm_exists
+  register: vm_create_ceph_exists
   changed_when: false
   failed_when: false
   loop: "{{ ceph_nodes }}"
@@ -14,7 +14,7 @@
     remote_src: true
     force: false
     mode: "0644"
-  loop: "{{ ceph_vm_exists.results }}"
+  loop: "{{ vm_create_ceph_exists.results }}"
   when: item.rc != 0
   delegate_to: "{{ item.item.hypervisor }}"
 
@@ -48,7 +48,7 @@
       --graphics spice
       --cpu host-model
       --noautoconsole
-  loop: "{{ ceph_vm_exists.results }}"
+  loop: "{{ vm_create_ceph_exists.results }}"
   when: item.rc != 0
   delegate_to: "{{ item.item.hypervisor }}"
   changed_when: true

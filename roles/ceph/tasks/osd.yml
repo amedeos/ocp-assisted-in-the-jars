@@ -1,34 +1,34 @@
 ---
 - name: Get ceph node hostname
   ansible.builtin.command: hostname
-  register: ceph_hostname
+  register: ceph_osd_hostname
   changed_when: false
 
 - name: Check existing OSDs
   ansible.builtin.command: ceph osd tree -f json
-  register: osd_tree
+  register: ceph_osd_tree
   changed_when: false
 
 - name: Add OSD disks
   ansible.builtin.command:
-    cmd: "ceph orch daemon add osd {{ ceph_hostname.stdout }}:{{ item }}"
+    cmd: "ceph orch daemon add osd {{ ceph_osd_hostname.stdout }}:{{ item }}"
   loop: "{{ ceph_osd_devices }}"
-  register: osd_add
-  changed_when: "'Created osd' in osd_add.stdout"
-  failed_when: osd_add.rc != 0 and 'already' not in osd_add.stderr
-  when: (osd_tree.stdout | from_json).nodes | selectattr('type', 'eq', 'osd') | list | length < ceph_osd_devices | length
+  register: ceph_osd_add
+  changed_when: "'Created osd' in ceph_osd_add.stdout"
+  failed_when: ceph_osd_add.rc != 0 and 'already' not in ceph_osd_add.stderr
+  when: (ceph_osd_tree.stdout | from_json).nodes | selectattr('type', 'eq', 'osd') | list | length < ceph_osd_devices | length
 
 - name: Wait for all OSDs to be up
   ansible.builtin.command: ceph osd stat -f json
-  register: osd_stat
-  until: (osd_stat.stdout | from_json).num_up_osds | int >= ceph_osd_devices | length
+  register: ceph_osd_stat
+  until: (ceph_osd_stat.stdout | from_json).num_up_osds | int >= ceph_osd_devices | length
   retries: 30
   delay: 10
   changed_when: false
 
 - name: Check if pool exists
   ansible.builtin.command: "ceph osd pool ls"
-  register: pool_list
+  register: ceph_pool_list
   changed_when: false
 
 - name: Create storage pool for OpenShift
@@ -36,22 +36,22 @@
     cmd: >-
       ceph osd pool create {{ ceph_config.pool_name }}
       {{ ceph_config.pg_num }}
-  when: ceph_config.pool_name not in pool_list.stdout_lines
+  when: ceph_config.pool_name not in ceph_pool_list.stdout_lines
   changed_when: true
 
 - name: Enable RBD application on pool
   ansible.builtin.command:
     cmd: "ceph osd pool application enable {{ ceph_config.pool_name }} rbd"
-  register: rbd_enable
-  changed_when: "'enabled' in rbd_enable.stdout"
-  failed_when: rbd_enable.rc != 0 and 'already' not in rbd_enable.stderr
+  register: ceph_rbd_enable
+  changed_when: "'enabled' in ceph_rbd_enable.stdout"
+  failed_when: ceph_rbd_enable.rc != 0 and 'already' not in ceph_rbd_enable.stderr
 
 - name: Enable Ceph prometheus module for ODF monitoring
   ansible.builtin.command:
     cmd: ceph mgr module enable prometheus
-  register: prometheus_enable
-  changed_when: "'already' not in prometheus_enable.stderr"
-  failed_when: prometheus_enable.rc != 0 and 'already' not in prometheus_enable.stderr
+  register: ceph_prometheus_enable
+  changed_when: "'already' not in ceph_prometheus_enable.stderr"
+  failed_when: ceph_prometheus_enable.rc != 0 and 'already' not in ceph_prometheus_enable.stderr
 
 - name: Create CephX credentials for OpenShift ODF
   ansible.builtin.command:
@@ -60,7 +60,7 @@
       mon 'profile rbd'
       osd 'profile rbd pool={{ ceph_config.pool_name }}'
       mgr 'profile rbd pool={{ ceph_config.pool_name }}'
-  register: cephx_key
+  register: ceph_cephx_key
   changed_when: false
   no_log: true
 

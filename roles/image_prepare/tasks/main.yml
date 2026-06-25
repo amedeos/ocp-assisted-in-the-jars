@@ -7,15 +7,15 @@
 - name: Check which golden images already exist
   ansible.builtin.stat:
     path: "{{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2"
-  register: golden_image_check
+  register: image_prepare_golden_check
   loop: "{{ image_prepare_vms }}"
   loop_control:
     loop_var: vm
 
 - name: Determine which images need preparation
   ansible.builtin.set_fact:
-    images_to_prepare: >-
-      {{ golden_image_check.results
+    image_prepare_todo: >-
+      {{ image_prepare_golden_check.results
          | selectattr('stat.exists', 'eq', false)
          | map(attribute='vm')
          | list }}
@@ -23,21 +23,21 @@
 - name: Skip if all golden images exist
   ansible.builtin.debug:
     msg: "All golden images already exist on {{ inventory_hostname }}, skipping"
-  when: images_to_prepare | length == 0
+  when: image_prepare_todo | length == 0
 
 - name: Check if base image exists locally
   ansible.builtin.stat:
     path: "{{ image_location }}"
-  register: base_image_stat
-  when: images_to_prepare | length > 0
+  register: image_prepare_base_stat
+  when: image_prepare_todo | length > 0
 
 - name: Fail if base image not found
   ansible.builtin.assert:
-    that: base_image_stat.stat.exists
+    that: image_prepare_base_stat.stat.exists
     fail_msg: >-
       RHEL base image not found at {{ image_location }}.
       Download it from access.redhat.com and place it there.
-  when: images_to_prepare | length > 0
+  when: image_prepare_todo | length > 0
 
 - name: Copy base image to image directory
   ansible.builtin.copy:
@@ -46,33 +46,34 @@
     remote_src: true
     force: false
     mode: "0644"
-  when: images_to_prepare | length > 0
+  when: image_prepare_todo | length > 0
 
 - name: Prepare golden images
   ansible.builtin.include_tasks: prepare_single_image.yml
-  loop: "{{ images_to_prepare }}"
+  loop: "{{ image_prepare_todo }}"
   loop_control:
     loop_var: vm
 
 - name: Read SSH public key
   ansible.builtin.slurp:
     src: "{{ ssh_key_public }}"
-  register: ssh_pub_content
+  register: image_prepare_ssh_pub
   delegate_to: localhost
   become: false
   run_once: true
 
 - name: Customize golden images
+  when: image_prepare_todo | length > 0
   block:
     - name: Customize golden images
       ansible.builtin.command:
         cmd: >-
           virt-customize -a {{ image_dir }}/{{ supported_os }}-{{ vm.name }}.qcow2
           --root-password password:"{{ secure_password }}"
-          --ssh-inject "root:string:{{ ssh_pub_content.content | b64decode | trim }}"
+          --ssh-inject "root:string:{{ image_prepare_ssh_pub.content | b64decode | trim }}"
           --selinux-relabel
           --run-command 'dnf remove cloud-init* -y || true'
-      loop: "{{ images_to_prepare }}"
+      loop: "{{ image_prepare_todo }}"
       loop_control:
         loop_var: vm
       changed_when: true
@@ -82,10 +83,9 @@
     - name: Image customization failed
       ansible.builtin.fail:
         msg: "virt-customize failed. Check that libguestfs-tools is installed."
-  when: images_to_prepare | length > 0
 
 - name: Inject network configuration
   ansible.builtin.include_tasks: inject_network.yml
-  loop: "{{ images_to_prepare }}"
+  loop: "{{ image_prepare_todo }}"
   loop_control:
     loop_var: vm

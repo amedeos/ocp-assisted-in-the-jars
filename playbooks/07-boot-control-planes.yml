@@ -24,7 +24,7 @@
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
 
-    - name: Display next steps
+    - name: Display next steps  # noqa: run-once[task]
       ansible.builtin.debug:
         msg:
           - "Control-plane VMs are now booting from the discovery ISO."

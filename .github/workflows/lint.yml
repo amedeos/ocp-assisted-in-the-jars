@@ -1,0 +1,39 @@
+---
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install ansible-core ansible-lint yamllint
+
+      - name: Install Ansible Galaxy collections
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Run yamllint
+        run: yamllint .
+
+      - name: Run ansible-lint
+        run: ansible-lint playbooks/ roles/
+
+      - name: Run syntax check
+        run: |
+          echo "ci-dummy" > /tmp/vault-pass
+          ansible-playbook playbooks/site.yml --syntax-check \
+            --vault-password-file /tmp/vault-pass
+          rm /tmp/vault-pass

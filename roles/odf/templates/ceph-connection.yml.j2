@@ -11,7 +11,7 @@ stringData:
         "name": "rook-ceph-mon-endpoints",
         "kind": "ConfigMap",
         "data": {
-          "data": "a={{ ceph_mon_ip }}:3300",
+          "data": "a={{ odf_ceph_mon_ip }}:3300",
           "mapping": "{}",
           "maxMonId": "0"
         }
@@ -20,8 +20,8 @@ stringData:
         "name": "rook-ceph-mon",
         "kind": "Secret",
         "data": {
-          "admin-secret": "{{ ceph_admin_key }}",
-          "fsid": "{{ ceph_fsid }}",
+          "admin-secret": "{{ odf_ceph_admin_key }}",
+          "fsid": "{{ odf_ceph_fsid }}",
           "mon-secret": "mon-secret"
         }
       },
@@ -30,7 +30,7 @@ stringData:
         "kind": "Secret",
         "data": {
           "userID": "admin",
-          "userKey": "{{ ceph_admin_key }}"
+          "userKey": "{{ odf_ceph_admin_key }}"
         }
       },
       {
@@ -38,7 +38,7 @@ stringData:
         "kind": "Secret",
         "data": {
           "userID": "openshift",
-          "userKey": "{{ ceph_key }}"
+          "userKey": "{{ odf_ceph_key }}"
         }
       },
       {
@@ -46,7 +46,7 @@ stringData:
         "kind": "Secret",
         "data": {
           "userID": "openshift",
-          "userKey": "{{ ceph_key }}"
+          "userKey": "{{ odf_ceph_key }}"
         }
       },
       {
@@ -60,7 +60,7 @@ stringData:
         "name": "monitoring-endpoint",
         "kind": "CephCluster",
         "data": {
-          "MonitoringEndpoint": "{{ ceph_mon_ip }}",
+          "MonitoringEndpoint": "{{ odf_ceph_mon_ip }}",
           "MonitoringPort": "9283"
         }
       }

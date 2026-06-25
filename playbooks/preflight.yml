@@ -16,14 +16,13 @@
         fail_msg: "KVM kernel module not loaded. Enable Intel VT-x/AMD-V in BIOS."
 
     - name: Check libvirtd is running
-      ansible.builtin.command: systemctl is-active libvirtd
+      ansible.builtin.systemd:
+        name: libvirtd
       register: libvirtd_status
-      changed_when: false
-      failed_when: false
 
     - name: Verify libvirtd is active
       ansible.builtin.assert:
-        that: libvirtd_status.stdout == 'active'
+        that: libvirtd_status.status.ActiveState == 'active'
         fail_msg: "libvirtd is not running. Start it with: systemctl start libvirtd"
 
     # ---- Network ----

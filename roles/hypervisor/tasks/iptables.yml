@@ -15,7 +15,7 @@
     jump: MASQUERADE
     state: present
   when: hypervisor_enable_nat | bool
-  notify: save_iptables
+  notify: Save iptables
 
 - name: Allow forwarding from baremetal network
   ansible.builtin.iptables:
@@ -24,7 +24,7 @@
     jump: ACCEPT
     state: present
   when: hypervisor_enable_nat | bool
-  notify: save_iptables
+  notify: Save iptables
 
 - name: Allow forwarding to baremetal network
   ansible.builtin.iptables:
@@ -33,7 +33,7 @@
     jump: ACCEPT
     state: present
   when: hypervisor_enable_nat | bool
-  notify: save_iptables
+  notify: Save iptables
 
 - name: DNAT port 443 to ingress VIP
   ansible.builtin.iptables:
@@ -46,7 +46,7 @@
     to_destination: "{{ vip.ingress }}:443"
     state: present
   when: hypervisor_enable_portfw | bool
-  notify: save_iptables
+  notify: Save iptables
 
 - name: DNAT port 6443 to API VIP
   ansible.builtin.iptables:
@@ -59,4 +59,4 @@
     to_destination: "{{ vip.api }}:6443"
     state: present
   when: hypervisor_enable_portfw | bool
-  notify: save_iptables
+  notify: Save iptables
