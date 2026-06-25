@@ -4,39 +4,64 @@
   become: true
   gather_facts: false
   tasks:
-    - name: Start utility VM
+    - name: Start utility VM  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         state: running
       loop: "{{ utility_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
+      run_once: true
 
-    - name: Wait for utility VM
+    - name: Wait for utility VM  # noqa: run-once[task]
       ansible.builtin.wait_for:
         host: "{{ item.ip }}"
         port: 22
         delay: 5
         timeout: 120
       loop: "{{ utility_nodes }}"
+      run_once: true
+      become: false
 
-    - name: Start ceph VM
+    - name: Start ceph VM  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         state: running
       loop: "{{ ceph_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
+      run_once: true
 
-    - name: Wait for ceph VM
+    - name: Wait for ceph VM  # noqa: run-once[task]
       ansible.builtin.wait_for:
         host: "{{ item.ip }}"
         port: 22
         delay: 5
         timeout: 120
       loop: "{{ ceph_nodes }}"
+      run_once: true
+      become: false
 
-    - name: Start control-plane VMs
+    - name: Eject discovery ISO from control-plane VMs  # noqa: run-once[task]
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          cdrom_target=$(virsh domblklist {{ item.name }} --details | awk '$2 == "cdrom" { print $3 }') &&
+          cdrom_source=$(virsh domblklist {{ item.name }} --details | awk '$2 == "cdrom" { print $4 }') &&
+          if [ -n "$cdrom_target" ] && [ -n "$cdrom_source" ] && [ "$cdrom_source" != "-" ]; then
+            virsh change-media {{ item.name }} "$cdrom_target" --eject --force --config 2>/dev/null || true;
+            echo "EJECTED";
+          else
+            echo "EMPTY";
+          fi
+      loop: "{{ controlplane_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      register: startup_iso_eject
+      changed_when: "'EJECTED' in startup_iso_eject.stdout"
+      run_once: true
+
+    - name: Start control-plane VMs  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         state: running
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
+      run_once: true

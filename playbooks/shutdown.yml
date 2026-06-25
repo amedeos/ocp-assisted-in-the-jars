@@ -4,38 +4,42 @@
   become: true
   gather_facts: false
   tasks:
-    - name: Shut down control-plane VMs
+    - name: Shut down control-plane VMs  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         state: shutdown
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
       failed_when: false
+      run_once: true
 
-    - name: Wait for control-plane VMs to stop
+    - name: Wait for control-plane VMs to stop  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         command: status
       register: cp_status
-      until: cp_status.status == 'shutdown' or cp_status.status == 'shutoff'
+      until: cp_status.status in ['shutdown', 'shutoff']
       retries: 30
       delay: 10
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
       failed_when: false
+      run_once: true
 
-    - name: Shut down ceph VM
+    - name: Shut down ceph VM  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         state: shutdown
       loop: "{{ ceph_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
       failed_when: false
+      run_once: true
 
-    - name: Shut down utility VM
+    - name: Shut down utility VM  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         state: shutdown
       loop: "{{ utility_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
       failed_when: false
+      run_once: true
