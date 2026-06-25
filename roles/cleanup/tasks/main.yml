@@ -35,6 +35,12 @@
     - ceph
   when: cleanup_remove_images | bool
 
+- name: Remove discovery ISO
+  ansible.builtin.file:
+    path: "{{ assisted.discovery_iso_path }}"
+    state: absent
+  when: cleanup_remove_images | bool
+
 - name: Remove SSH config entries
   ansible.builtin.blockinfile:
     path: "{{ lookup('env', 'HOME') }}/.ssh/config"
