@@ -37,9 +37,20 @@
 
 - name: Remove SSH config entries
   ansible.builtin.blockinfile:
-    path: "{{ ansible_facts.env.HOME }}/.ssh/config"
+    path: "{{ lookup('env', 'HOME') }}/.ssh/config"
     marker: "# {mark} ocp-assisted-in-the-jars {{ cluster_name }}"
     state: absent
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Remove generated SSH key pair
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ ssh_key_private }}"
+    - "{{ ssh_key_public }}"
   delegate_to: localhost
   become: false
   run_once: true
