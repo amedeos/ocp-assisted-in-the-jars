@@ -4,6 +4,22 @@
   become: true
   gather_facts: false
   tasks:
+    - name: Check if API VIP is already reachable  # noqa: run-once[task]
+      ansible.builtin.wait_for:
+        host: "{{ vip.api }}"
+        port: 6443
+        timeout: 5
+      register: api_vip_check
+      failed_when: false
+      run_once: true
+      become: false
+
+    - name: Skip if installation is already in progress  # noqa: run-once[task]
+      ansible.builtin.debug:
+        msg: "API VIP {{ vip.api }}:6443 is reachable — installation already in progress, skipping stage 07."
+      when: api_vip_check.state | default('') == 'started'
+      run_once: true
+
     - name: Confirm cluster creation on console.redhat.com  # noqa: run-once[task]
       ansible.builtin.pause:
         prompt: >-
@@ -13,12 +29,14 @@
             3. Generated the discovery ISO
             4. Copied the ISO to {{ assisted.discovery_iso_path }}
           Press ENTER to continue or Ctrl+C to abort
+      when: api_vip_check.state | default('') != 'started'
       run_once: true
 
     - name: Verify discovery ISO exists
       ansible.builtin.stat:
         path: "{{ assisted.discovery_iso_path }}"
       register: iso_stat
+      when: api_vip_check.state | default('') != 'started'
 
     - name: Fail if discovery ISO not found
       ansible.builtin.assert:
@@ -26,6 +44,7 @@
         fail_msg: >-
           Discovery ISO not found at {{ assisted.discovery_iso_path }}.
           Download it from console.redhat.com and place it at that path.
+      when: api_vip_check.state | default('') != 'started'
 
     - name: Stop control-plane VMs before attaching ISO  # noqa: run-once[task]
       community.libvirt.virt:
@@ -35,6 +54,7 @@
       delegate_to: "{{ item.hypervisor }}"
       failed_when: false
       run_once: true
+      when: api_vip_check.state | default('') != 'started'
 
     - name: Detect cdrom device target for control-plane VMs  # noqa: run-once[task]
       ansible.builtin.shell:
@@ -47,6 +67,7 @@
       delegate_to: "{{ item.hypervisor }}"
       changed_when: false
       run_once: true
+      when: api_vip_check.state | default('') != 'started'
 
     - name: Insert discovery ISO into control-plane VMs  # noqa: run-once[task]
       ansible.builtin.command:
@@ -55,13 +76,15 @@
           {{ item.stdout | trim }}
           {{ assisted.discovery_iso_path }}
           --insert --config
-      loop: "{{ cp_cdrom_targets.results }}"
-      when: item.stdout | trim | length > 0
+      loop: "{{ cp_cdrom_targets.results | default([]) }}"
+      when: >-
+        api_vip_check.state | default('') != 'started' and
+        item.stdout | default('') | trim | length > 0
       delegate_to: "{{ item.item.hypervisor }}"
       register: cp_iso_insert
       changed_when: "'Successfully inserted' in cp_iso_insert.stdout | default('')"
       failed_when: >-
-        cp_iso_insert.rc != 0 and
+        cp_iso_insert.rc | default(0) != 0 and
         'already' not in cp_iso_insert.stderr | default('')
       run_once: true
 
@@ -72,6 +95,7 @@
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
       run_once: true
+      when: api_vip_check.state | default('') != 'started'
 
     - name: Display next steps  # noqa: run-once[task]
       ansible.builtin.debug:
@@ -88,3 +112,4 @@
           - "  virsh console control-plane-1"
           - "  virsh console control-plane-2"
       run_once: true
+      when: api_vip_check.state | default('') != 'started'
