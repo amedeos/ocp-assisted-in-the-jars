@@ -1,0 +1,4 @@
+{{ ansible_managed | comment }}
+{% for disk in vm_specs.ceph.osd_disks %}
+ACTION=="add|change", KERNEL=="{{ disk.device }}", ATTR{queue/rotational}="0"
+{% endfor %}

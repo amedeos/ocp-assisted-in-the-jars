@@ -1,0 +1,6 @@
+---
+assisted_monitor_vm_retries: 120
+assisted_monitor_vm_delay: 30
+assisted_monitor_cluster_retries: 120
+assisted_monitor_cluster_delay: 30
+assisted_monitor_ssh_timeout: 3600

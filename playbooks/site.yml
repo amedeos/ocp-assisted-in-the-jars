@@ -35,6 +35,10 @@
   ansible.builtin.import_playbook: 07-boot-control-planes.yml
   tags: [boot-control-planes]
 
+- name: Monitor Assisted Installer and wait for cluster
+  ansible.builtin.import_playbook: 07b-monitor-installation.yml
+  tags: [monitor-installation]
+
 - name: Post-install - setup oc client and kubeconfig
   ansible.builtin.import_playbook: 08-post-install.yml
   tags: [post-install]

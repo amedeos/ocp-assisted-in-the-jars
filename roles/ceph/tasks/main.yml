@@ -5,5 +5,8 @@
 - name: Bootstrap Ceph cluster
   ansible.builtin.include_tasks: bootstrap.yml
 
+- name: Mark OSD devices as SSD via udev
+  ansible.builtin.include_tasks: udev_ssd.yml
+
 - name: Configure OSDs and storage pool
   ansible.builtin.include_tasks: osd.yml

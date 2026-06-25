@@ -1,0 +1,20 @@
+---
+- name: Monitor control-plane VMs during Assisted Installer
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Monitor and restart VMs
+      ansible.builtin.include_role:
+        name: assisted_monitor
+        tasks_from: monitor_vms
+
+- name: Wait for OpenShift cluster to be ready
+  hosts: utility_vms
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Monitor cluster readiness
+      ansible.builtin.include_role:
+        name: assisted_monitor
+        tasks_from: wait_cluster

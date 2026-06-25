@@ -1,0 +1,137 @@
+---
+- name: Check if oc client is installed
+  ansible.builtin.command: oc version --client
+  register: assisted_monitor_oc_check
+  changed_when: false
+  failed_when: false
+
+- name: Download and install oc client
+  when: assisted_monitor_oc_check.rc != 0
+  block:
+    - name: Download oc client tarball
+      ansible.builtin.get_url:
+        url: "{{ ocp_client_url }}"
+        dest: /tmp/openshift-client-linux.tar.gz
+        mode: "0644"
+
+    - name: Extract oc client
+      ansible.builtin.unarchive:
+        src: /tmp/openshift-client-linux.tar.gz
+        dest: /usr/local/bin/
+        remote_src: true
+        extra_opts:
+          - oc
+          - kubectl
+
+    - name: Remove tarball
+      ansible.builtin.file:
+        path: /tmp/openshift-client-linux.tar.gz
+        state: absent
+
+- name: Copy SSH key for control-plane access
+  ansible.builtin.copy:
+    src: "{{ ssh_key_private }}"
+    dest: /root/.ssh/cp_key
+    mode: "0600"
+
+- name: Display cluster monitoring message
+  ansible.builtin.debug:
+    msg:
+      - "Waiting for OpenShift cluster to become ready..."
+      - "Polling kubeconfig from control-plane-0 ({{ (controlplane_nodes | first).ip }})"
+
+- name: Fetch kubeconfig from control-plane-0
+  ansible.builtin.command:
+    cmd: >-
+      ssh -i /root/.ssh/cp_key
+      -o StrictHostKeyChecking=no
+      -o UserKnownHostsFile=/dev/null
+      -o ConnectTimeout=10
+      core@{{ (controlplane_nodes | first).ip }}
+      sudo cat {{ ocp_client_kubeconfig_src }}
+  register: assisted_monitor_kubeconfig
+  until: assisted_monitor_kubeconfig.rc == 0
+  retries: "{{ assisted_monitor_cluster_retries }}"
+  delay: "{{ assisted_monitor_cluster_delay }}"
+  changed_when: false
+  no_log: true
+
+- name: Save kubeconfig
+  ansible.builtin.copy:
+    content: "{{ assisted_monitor_kubeconfig.stdout }}"
+    dest: "{{ ocp_client_kubeconfig_path }}"
+    mode: "0600"
+  no_log: true
+
+- name: Wait for valid cluster version
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+      get clusterversion version
+      -o jsonpath='{.status.history[0].version}'
+  register: assisted_monitor_cv
+  until: >-
+    assisted_monitor_cv.rc == 0 and
+    assisted_monitor_cv.stdout is regex('^4\.\d+\.\d+$')
+  retries: "{{ assisted_monitor_cluster_retries }}"
+  delay: "{{ assisted_monitor_cluster_delay }}"
+  changed_when: false
+  failed_when: false
+
+- name: Fail if cluster version was not detected
+  ansible.builtin.fail:
+    msg: >-
+      Timed out waiting for a valid cluster version.
+      Last output: {{ assisted_monitor_cv.stdout | default('empty') }}
+  when: >-
+    assisted_monitor_cv.rc != 0 or
+    assisted_monitor_cv.stdout is not regex('^4\.\d+\.\d+$')
+
+- name: Display detected cluster version
+  ansible.builtin.debug:
+    msg: "Cluster version detected: {{ assisted_monitor_cv.stdout }}"
+
+- name: Wait for all cluster operators to be available and not degraded
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+      get co -o json
+  register: assisted_monitor_co
+  until: >-
+    assisted_monitor_co.rc == 0 and
+    (assisted_monitor_co.stdout | from_json).items |
+      map(attribute='status.conditions') | flatten |
+      selectattr('type', 'eq', 'Degraded') |
+      selectattr('status', 'eq', 'True') | list | length == 0
+    and
+    (assisted_monitor_co.stdout | from_json).items |
+      map(attribute='status.conditions') | flatten |
+      selectattr('type', 'eq', 'Available') |
+      rejectattr('status', 'eq', 'True') | list | length == 0
+  retries: "{{ assisted_monitor_cluster_retries }}"
+  delay: "{{ assisted_monitor_cluster_delay }}"
+  changed_when: false
+  failed_when: false
+
+- name: Fail if cluster operators are not ready
+  ansible.builtin.fail:
+    msg: "Timed out waiting for all cluster operators to be available and not degraded."
+  when: >-
+    assisted_monitor_co.rc != 0 or
+    (assisted_monitor_co.stdout | from_json).items |
+      map(attribute='status.conditions') | flatten |
+      selectattr('type', 'eq', 'Degraded') |
+      selectattr('status', 'eq', 'True') | list | length > 0
+    or
+    (assisted_monitor_co.stdout | from_json).items |
+      map(attribute='status.conditions') | flatten |
+      selectattr('type', 'eq', 'Available') |
+      rejectattr('status', 'eq', 'True') | list | length > 0
+
+- name: Display cluster readiness summary
+  ansible.builtin.debug:
+    msg:
+      - "OpenShift cluster is ready!"
+      - "Version: {{ assisted_monitor_cv.stdout }}"
+      - "All cluster operators are Available and not Degraded."
+      - "Proceeding with post-install configuration..."

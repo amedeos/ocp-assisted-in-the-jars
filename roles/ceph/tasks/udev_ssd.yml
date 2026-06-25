@@ -1,0 +1,23 @@
+---
+- name: Deploy udev rules to mark OSD devices as SSD
+  ansible.builtin.template:
+    src: 99-osd-ssd.rules.j2
+    dest: /etc/udev/rules.d/99-osd-ssd.rules
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload udev rules
+    - Trigger udev on OSD devices
+    - Wait for udev to settle
+
+- name: Flush handlers to apply udev rules before OSD creation
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify OSD devices report as non-rotational (SSD)
+  ansible.builtin.command:
+    cmd: "cat /sys/block/{{ item.device }}/queue/rotational"
+  loop: "{{ vm_specs.ceph.osd_disks }}"
+  register: ceph_rotational_check
+  changed_when: false
+  failed_when: ceph_rotational_check.stdout | trim != '0'

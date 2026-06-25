@@ -26,6 +26,13 @@
   delay: 10
   changed_when: false
 
+- name: Create CRUSH rule for SSD device class
+  ansible.builtin.command:
+    cmd: ceph osd crush rule create-replicated replicated_ssd default host ssd
+  register: ceph_crush_rule
+  changed_when: "'already' not in ceph_crush_rule.stderr"
+  failed_when: ceph_crush_rule.rc != 0 and 'already' not in ceph_crush_rule.stderr
+
 - name: Check if pool exists
   ansible.builtin.command: "ceph osd pool ls"
   register: ceph_pool_list
@@ -38,6 +45,13 @@
       {{ ceph_config.pg_num }}
   when: ceph_config.pool_name not in ceph_pool_list.stdout_lines
   changed_when: true
+
+- name: Set pool to use SSD CRUSH rule
+  ansible.builtin.command:
+    cmd: "ceph osd pool set {{ ceph_config.pool_name }} crush_rule replicated_ssd"
+  register: ceph_pool_crush
+  changed_when: "'set' in ceph_pool_crush.stdout"
+  failed_when: ceph_pool_crush.rc != 0
 
 - name: Enable RBD application on pool
   ansible.builtin.command:

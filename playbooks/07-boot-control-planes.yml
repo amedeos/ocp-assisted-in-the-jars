@@ -4,6 +4,17 @@
   become: true
   gather_facts: false
   tasks:
+    - name: Confirm cluster creation on console.redhat.com  # noqa: run-once[task]
+      ansible.builtin.pause:
+        prompt: >-
+          Before proceeding, ensure you have:
+            1. Created the cluster on console.redhat.com (Assisted Installer)
+            2. Added the SSH public key ({{ ssh_key_public }}) to the cluster configuration
+            3. Generated the discovery ISO
+            4. Copied the ISO to {{ assisted.discovery_iso_path }}
+          Press ENTER to continue or Ctrl+C to abort
+      run_once: true
+
     - name: Verify discovery ISO exists
       ansible.builtin.stat:
         path: "{{ assisted.discovery_iso_path }}"

@@ -1,5 +1,5 @@
 .PHONY: help deploy preflight ssh-key ssh-config create-utility create-vms configure-utility configure-ceph \
-        boot-control-planes post-install configure-odf cleanup startup shutdown lint check \
+        boot-control-planes monitor-installation post-install configure-odf cleanup startup shutdown lint check \
         vault-edit vault-encrypt vault-decrypt \
         pull-secret-encrypt pull-secret-decrypt collections
 
@@ -51,6 +51,9 @@ configure-ceph: ## Bootstrap Ceph with 3 OSDs
 
 boot-control-planes: ## Boot control-plane VMs from discovery ISO
 	$(ANSIBLE_CMD) playbooks/07-boot-control-planes.yml
+
+monitor-installation: ## Monitor Assisted Installer progress and wait for cluster ready
+	$(ANSIBLE_CMD) playbooks/07b-monitor-installation.yml
 
 post-install: ## Setup oc client and kubeconfig on utility VM
 	$(ANSIBLE_CMD) playbooks/08-post-install.yml

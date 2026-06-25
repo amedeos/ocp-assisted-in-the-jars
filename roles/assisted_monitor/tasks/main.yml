@@ -1,0 +1,6 @@
+---
+- name: Monitor control-plane VMs
+  ansible.builtin.include_tasks: monitor_vms.yml
+
+- name: Wait for cluster readiness
+  ansible.builtin.include_tasks: wait_cluster.yml
