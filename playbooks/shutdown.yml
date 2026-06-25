@@ -6,6 +6,7 @@
   vars:
     shutdown_kubeconfig_path: /root/kubeconfig-int
     shutdown_kubeconfig_src: /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/lb-int.kubeconfig
+    shutdown_delay_minutes: 2
   tasks:
     - name: Check if kubeconfig exists
       ansible.builtin.stat:
@@ -41,29 +42,33 @@
             mode: "0600"
           no_log: true
 
+    - name: Get OpenShift node names
+      ansible.builtin.command:
+        cmd: "oc --kubeconfig {{ shutdown_kubeconfig_path }} get nodes -o jsonpath='{.items[*].metadata.name}'"
+      register: shutdown_node_names
+      changed_when: false
+
+    - name: Display nodes to shut down
+      ansible.builtin.debug:
+        msg: "Nodes to shut down: {{ shutdown_node_names.stdout.split() }}"
+
     - name: Pre-pull debug image on all nodes
-      ansible.builtin.shell:
-        cmd: >-
-          for node in $(oc --kubeconfig {{ shutdown_kubeconfig_path }}
-          get nodes -o jsonpath='{.items[*].metadata.name}'); do
-            oc --kubeconfig {{ shutdown_kubeconfig_path }}
-            debug node/${node} -- chroot /host echo ready;
-          done
+      ansible.builtin.command:
+        cmd: "oc --kubeconfig {{ shutdown_kubeconfig_path }} debug node/{{ item }} -- chroot /host echo ready"
+      loop: "{{ shutdown_node_names.stdout.split() }}"
       changed_when: false
       failed_when: false
-      ignore_unreachable: true
 
     - name: Schedule shutdown on all OpenShift nodes
-      ansible.builtin.shell:
-        cmd: >-
-          for node in $(oc --kubeconfig {{ shutdown_kubeconfig_path }}
-          get nodes -o jsonpath='{.items[*].metadata.name}'); do
-            oc --kubeconfig {{ shutdown_kubeconfig_path }}
-            debug node/${node} -- chroot /host shutdown -h 2;
-          done
+      ansible.builtin.command:
+        cmd: "oc --kubeconfig {{ shutdown_kubeconfig_path }} debug node/{{ item }} -- chroot /host shutdown -h {{ shutdown_delay_minutes }}"
+      loop: "{{ shutdown_node_names.stdout.split() }}"
       changed_when: true
       failed_when: false
-      ignore_unreachable: true
+
+    - name: Display shutdown scheduled message
+      ansible.builtin.debug:
+        msg: "Shutdown scheduled in {{ shutdown_delay_minutes }} minutes on all nodes. Waiting for VMs to power off..."
 
 - name: Wait for control-plane VMs to stop and shut down remaining VMs
   hosts: hypervisors
@@ -75,7 +80,7 @@
         cmd: "virsh domstate {{ item.name }}"
       register: cp_shutdown_status
       until: cp_shutdown_status.stdout | trim == 'shut off'
-      retries: 30
+      retries: 60
       delay: 10
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
