@@ -1,4 +1,34 @@
 ---
+- name: Check if VMs are already shut off
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check all VM states  # noqa: run-once[task]
+      ansible.builtin.command:
+        cmd: "virsh domstate {{ item.name }}"
+      register: shutdown_vm_states
+      loop: "{{ cluster_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      changed_when: false
+      failed_when: false
+      run_once: true
+
+    - name: Determine if all VMs are already off  # noqa: run-once[task]
+      ansible.builtin.set_fact:
+        shutdown_all_off: >-
+          {{ shutdown_vm_states.results |
+             rejectattr('stdout', 'undefined') |
+             selectattr('stdout', 'search', 'shut off') |
+             list | length == cluster_nodes | length }}
+      run_once: true
+
+    - name: Display skip message  # noqa: run-once[task]
+      ansible.builtin.debug:
+        msg: "All VMs are already shut off, nothing to do."
+      when: shutdown_all_off | bool
+      run_once: true
+
 - name: Gracefully shut down OpenShift nodes
   hosts: utility_vms
   become: true
@@ -12,9 +42,12 @@
       ansible.builtin.stat:
         path: "{{ shutdown_kubeconfig_path }}"
       register: shutdown_kubeconfig_stat
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
 
     - name: Fetch kubeconfig from control-plane-0 if missing
-      when: not shutdown_kubeconfig_stat.stat.exists
+      when: >-
+        not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool) and
+        not (shutdown_kubeconfig_stat.stat.exists | default(true))
       block:
         - name: Copy SSH key for control-plane access
           ansible.builtin.copy:
@@ -47,28 +80,33 @@
         cmd: "oc --kubeconfig {{ shutdown_kubeconfig_path }} get nodes -o jsonpath='{.items[*].metadata.name}'"
       register: shutdown_node_names
       changed_when: false
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
 
     - name: Display nodes to shut down
       ansible.builtin.debug:
         msg: "Nodes to shut down: {{ shutdown_node_names.stdout.split() }}"
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
 
     - name: Pre-pull debug image on all nodes
       ansible.builtin.command:
         cmd: "oc --kubeconfig {{ shutdown_kubeconfig_path }} debug node/{{ item }} -- chroot /host echo ready"
-      loop: "{{ shutdown_node_names.stdout.split() }}"
+      loop: "{{ shutdown_node_names.stdout.split() | default([]) }}"
       changed_when: false
       failed_when: false
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
 
     - name: Schedule shutdown on all OpenShift nodes
       ansible.builtin.command:
         cmd: "oc --kubeconfig {{ shutdown_kubeconfig_path }} debug node/{{ item }} -- chroot /host shutdown -h {{ shutdown_delay_minutes }}"
-      loop: "{{ shutdown_node_names.stdout.split() }}"
+      loop: "{{ shutdown_node_names.stdout.split() | default([]) }}"
       changed_when: true
       failed_when: false
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
 
     - name: Display shutdown scheduled message
       ansible.builtin.debug:
         msg: "Shutdown scheduled in {{ shutdown_delay_minutes }} minutes on all nodes. Waiting for VMs to power off..."
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
 
 - name: Wait for control-plane VMs to stop and shut down remaining VMs
   hosts: hypervisors
@@ -87,13 +125,16 @@
       changed_when: false
       failed_when: false
       run_once: true
+      when: not (shutdown_all_off | default(false) | bool)
 
     - name: Force off control-plane VMs still running  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.item.name }}"
         state: destroyed
-      loop: "{{ cp_shutdown_status.results }}"
-      when: item.stdout | default('') | trim != 'shut off'
+      loop: "{{ cp_shutdown_status.results | default([]) }}"
+      when: >-
+        not (shutdown_all_off | default(false) | bool) and
+        item.stdout | default('') | trim != 'shut off'
       delegate_to: "{{ item.item.hypervisor }}"
       failed_when: false
       run_once: true
@@ -106,6 +147,7 @@
       delegate_to: "{{ item.hypervisor }}"
       failed_when: false
       run_once: true
+      when: not (shutdown_all_off | default(false) | bool)
 
     - name: Wait for ceph VM to be shut off  # noqa: run-once[task]
       ansible.builtin.command:
@@ -119,6 +161,7 @@
       changed_when: false
       failed_when: false
       run_once: true
+      when: not (shutdown_all_off | default(false) | bool)
 
     - name: Shut down utility VM  # noqa: run-once[task]
       community.libvirt.virt:
@@ -128,6 +171,7 @@
       delegate_to: "{{ item.hypervisor }}"
       failed_when: false
       run_once: true
+      when: not (shutdown_all_off | default(false) | bool)
 
     - name: Wait for utility VM to be shut off  # noqa: run-once[task]
       ansible.builtin.command:
@@ -141,3 +185,4 @@
       changed_when: false
       failed_when: false
       run_once: true
+      when: not (shutdown_all_off | default(false) | bool)
