@@ -1,5 +1,5 @@
 ---
-- name: Start all VMs in correct order
+- name: Start utility VM and verify DNS
   hosts: hypervisors
   become: true
   gather_facts: false
@@ -12,7 +12,7 @@
       delegate_to: "{{ item.hypervisor }}"
       run_once: true
 
-    - name: Wait for utility VM  # noqa: run-once[task]
+    - name: Wait for utility VM SSH  # noqa: run-once[task]
       ansible.builtin.wait_for:
         host: "{{ item.ip }}"
         port: 22
@@ -22,6 +22,25 @@
       run_once: true
       become: false
 
+- name: Verify dnsmasq is running
+  hosts: utility_vms
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Wait for dnsmasq to be running
+      ansible.builtin.service_facts:
+      register: startup_service_facts
+      until: >-
+        startup_service_facts.ansible_facts.services['dnsmasq.service'] is defined and
+        startup_service_facts.ansible_facts.services['dnsmasq.service'].state == 'running'
+      retries: 30
+      delay: 5
+
+- name: Start ceph VM and verify health
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  tasks:
     - name: Start ceph VM  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
@@ -30,7 +49,7 @@
       delegate_to: "{{ item.hypervisor }}"
       run_once: true
 
-    - name: Wait for ceph VM  # noqa: run-once[task]
+    - name: Wait for ceph VM SSH  # noqa: run-once[task]
       ansible.builtin.wait_for:
         host: "{{ item.ip }}"
         port: 22
@@ -40,6 +59,35 @@
       run_once: true
       become: false
 
+- name: Verify Ceph health
+  hosts: ceph_vms
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Wait for Ceph to be healthy
+      ansible.builtin.command:
+        cmd: ceph health
+      register: startup_ceph_health
+      until: startup_ceph_health.stdout | trim in ['HEALTH_OK', 'HEALTH_WARN']
+      retries: 60
+      delay: 10
+      changed_when: false
+
+    - name: Display Ceph status
+      ansible.builtin.command:
+        cmd: ceph -s
+      register: startup_ceph_status
+      changed_when: false
+
+    - name: Show Ceph status
+      ansible.builtin.debug:
+        var: startup_ceph_status.stdout_lines
+
+- name: Start control-plane VMs
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  tasks:
     - name: Eject discovery ISO from control-plane VMs  # noqa: run-once[task]
       ansible.builtin.shell:
         cmd: >-
@@ -65,3 +113,63 @@
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
       run_once: true
+
+- name: Verify OpenShift cluster is ready
+  hosts: utility_vms
+  become: true
+  gather_facts: false
+  vars:
+    startup_kubeconfig_path: /root/kubeconfig-int
+  tasks:
+    - name: Wait for API VIP to be reachable
+      ansible.builtin.wait_for:
+        host: "{{ vip.api }}"
+        port: 6443
+        delay: 30
+        timeout: 600
+      become: false
+
+    - name: Wait for valid cluster version
+      ansible.builtin.command:
+        cmd: >-
+          oc --kubeconfig {{ startup_kubeconfig_path }}
+          get clusterversion version
+          -o jsonpath='{.status.history[0].version}'
+      register: startup_cv
+      until: >-
+        startup_cv.rc == 0 and
+        startup_cv.stdout is regex('^4\.\d+\.\d+$')
+      retries: 60
+      delay: 10
+      changed_when: false
+      failed_when: false
+
+    - name: Display cluster version
+      ansible.builtin.debug:
+        msg: "Cluster version: {{ startup_cv.stdout | default('not available') }}"
+
+    - name: Wait for all cluster operators to be available and not degraded
+      ansible.builtin.command:
+        cmd: >-
+          oc --kubeconfig {{ startup_kubeconfig_path }}
+          get co -o json
+      register: startup_co
+      until: >-
+        startup_co.rc == 0 and
+        (startup_co.stdout | from_json)['items'] |
+          map(attribute='status.conditions') | flatten |
+          selectattr('type', 'eq', 'Degraded') |
+          selectattr('status', 'eq', 'True') | list | length == 0
+        and
+        (startup_co.stdout | from_json)['items'] |
+          map(attribute='status.conditions') | flatten |
+          selectattr('type', 'eq', 'Available') |
+          rejectattr('status', 'eq', 'True') | list | length == 0
+      retries: 60
+      delay: 10
+      changed_when: false
+      failed_when: false
+
+    - name: Display cluster readiness
+      ansible.builtin.debug:
+        msg: "OpenShift cluster is ready — version {{ startup_cv.stdout }}, all operators Available."
