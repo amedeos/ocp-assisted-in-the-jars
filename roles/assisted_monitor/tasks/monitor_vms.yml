@@ -18,7 +18,7 @@
 
       if [ "$state" = "shut off" ]; then
         if [ -n "$cdrom_target" ] && [ -n "$cdrom_source" ] && [ "$cdrom_source" != "-" ]; then
-          virsh change-media "{{ item.name }}" "$cdrom_target" --eject --force 2>/dev/null || true
+          virsh change-media "{{ item.name }}" "$cdrom_target" --eject --force --config 2>/dev/null || true
           echo "EJECTED discovery ISO from {{ item.name }}"
         fi
         virsh start "{{ item.name }}"
@@ -52,4 +52,5 @@
     port: 22
     delay: 30
     timeout: "{{ assisted_monitor_ssh_timeout }}"
+  become: false
   delegate_to: localhost

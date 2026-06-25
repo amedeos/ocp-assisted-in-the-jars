@@ -10,7 +10,7 @@
   block:
     - name: Download oc client tarball
       ansible.builtin.get_url:
-        url: "{{ ocp_client_url }}"
+        url: "{{ assisted_monitor_oc_url }}"
         dest: /tmp/openshift-client-linux.tar.gz
         mode: "0644"
 
@@ -48,7 +48,7 @@
       -o UserKnownHostsFile=/dev/null
       -o ConnectTimeout=10
       core@{{ (controlplane_nodes | first).ip }}
-      sudo cat {{ ocp_client_kubeconfig_src }}
+      sudo cat {{ assisted_monitor_kubeconfig_src }}
   register: assisted_monitor_kubeconfig
   until: assisted_monitor_kubeconfig.rc == 0
   retries: "{{ assisted_monitor_cluster_retries }}"
@@ -59,14 +59,14 @@
 - name: Save kubeconfig
   ansible.builtin.copy:
     content: "{{ assisted_monitor_kubeconfig.stdout }}"
-    dest: "{{ ocp_client_kubeconfig_path }}"
+    dest: "{{ assisted_monitor_kubeconfig_path }}"
     mode: "0600"
   no_log: true
 
 - name: Wait for valid cluster version
   ansible.builtin.command:
     cmd: >-
-      oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+      oc --kubeconfig {{ assisted_monitor_kubeconfig_path }}
       get clusterversion version
       -o jsonpath='{.status.history[0].version}'
   register: assisted_monitor_cv
@@ -94,7 +94,7 @@
 - name: Wait for all cluster operators to be available and not degraded
   ansible.builtin.command:
     cmd: >-
-      oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+      oc --kubeconfig {{ assisted_monitor_kubeconfig_path }}
       get co -o json
   register: assisted_monitor_co
   until: >-
