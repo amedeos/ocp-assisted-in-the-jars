@@ -1,50 +1,45 @@
 ---
-- name: Display monitoring start message  # noqa: run-once[task]
+- name: Display monitoring start message
   ansible.builtin.debug:
     msg:
-      - "Monitoring control-plane VMs for Assisted Installer shutdown..."
-      - "VMs will be restarted without discovery ISO once the installer shuts them off."
-      - "This may take up to {{ (assisted_monitor_vm_retries | int * assisted_monitor_vm_delay | int / 60) | int }} minutes."
-  run_once: true
+      - "Waiting for API VIP {{ vip.api }}:6443 to become reachable..."
+      - "This indicates the OpenShift installation is progressing."
 
-- name: Wait for VM to be restarted without discovery ISO
+- name: Wait for API VIP to be reachable
+  ansible.builtin.wait_for:
+    host: "{{ vip.api }}"
+    port: 6443
+    delay: 30
+    timeout: "{{ assisted_monitor_ssh_timeout }}"
+  become: false
+
+- name: Display API VIP reachable message
+  ansible.builtin.debug:
+    msg: "API VIP {{ vip.api }}:6443 is reachable. Installation is progressing."
+
+- name: Check and restart any shut-off control-plane VMs
   ansible.builtin.shell:
     cmd: |
       set -euo pipefail
       state=$(virsh domstate "{{ item.name }}")
-      cdrom_info=$(virsh domblklist "{{ item.name }}" --details | awk '$2 == "cdrom"')
-      cdrom_target=$(echo "$cdrom_info" | awk '{ print $3 }')
-      cdrom_source=$(echo "$cdrom_info" | awk '{ print $4 }')
-
       if [ "$state" = "shut off" ]; then
+        cdrom_info=$(virsh domblklist "{{ item.name }}" --details | awk '$2 == "cdrom"')
+        cdrom_target=$(echo "$cdrom_info" | awk '{ print $3 }')
+        cdrom_source=$(echo "$cdrom_info" | awk '{ print $4 }')
         if [ -n "$cdrom_target" ] && [ -n "$cdrom_source" ] && [ "$cdrom_source" != "-" ]; then
           virsh change-media "{{ item.name }}" "$cdrom_target" --eject --force --config 2>/dev/null || true
-          echo "EJECTED discovery ISO from {{ item.name }}"
+          echo "EJECTED ISO from {{ item.name }}"
         fi
         virsh start "{{ item.name }}"
-        echo "RESTARTED {{ item.name }} (booting from disk)"
-        exit 1
+        echo "RESTARTED {{ item.name }}"
+      else
+        echo "OK {{ item.name }} state=$state"
       fi
-
-      if [ "$state" = "running" ] && { [ -z "$cdrom_source" ] || [ "$cdrom_source" = "-" ]; }; then
-        echo "READY {{ item.name }} is running without discovery ISO"
-        exit 0
-      fi
-
-      echo "WAITING {{ item.name }} state=$state cdrom=$cdrom_source"
-      exit 1
   loop: "{{ controlplane_nodes }}"
   delegate_to: "{{ item.hypervisor }}"
-  register: assisted_monitor_vm_result
-  until: assisted_monitor_vm_result.rc == 0
-  retries: "{{ assisted_monitor_vm_retries }}"
-  delay: "{{ assisted_monitor_vm_delay }}"
-  changed_when: "'RESTARTED' in assisted_monitor_vm_result.stdout or 'EJECTED' in assisted_monitor_vm_result.stdout"
-
-- name: Display VM restart results  # noqa: run-once[task]
-  ansible.builtin.debug:
-    msg: "All control-plane VMs restarted without discovery ISO. Waiting for SSH..."
-  run_once: true
+  register: assisted_monitor_vm_check
+  changed_when: "'RESTARTED' in assisted_monitor_vm_check.stdout or 'EJECTED' in assisted_monitor_vm_check.stdout"
+  failed_when: false
 
 - name: Wait for SSH on control-plane-0
   ansible.builtin.wait_for:
@@ -53,4 +48,3 @@
     delay: 30
     timeout: "{{ assisted_monitor_ssh_timeout }}"
   become: false
-  delegate_to: localhost

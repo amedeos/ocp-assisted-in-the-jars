@@ -40,6 +40,29 @@
       - "Waiting for OpenShift cluster to become ready..."
       - "Polling kubeconfig from control-plane-0 ({{ (controlplane_nodes | first).ip }})"
 
+- name: Check and restart any shut-off control-plane VMs
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      state=$(virsh domstate "{{ item.name }}")
+      if [ "$state" = "shut off" ]; then
+        cdrom_info=$(virsh domblklist "{{ item.name }}" --details | awk '$2 == "cdrom"')
+        cdrom_target=$(echo "$cdrom_info" | awk '{ print $3 }')
+        cdrom_source=$(echo "$cdrom_info" | awk '{ print $4 }')
+        if [ -n "$cdrom_target" ] && [ -n "$cdrom_source" ] && [ "$cdrom_source" != "-" ]; then
+          virsh change-media "{{ item.name }}" "$cdrom_target" --eject --force --config 2>/dev/null || true
+        fi
+        virsh start "{{ item.name }}"
+        echo "RESTARTED {{ item.name }}"
+      else
+        echo "OK {{ item.name }} state=$state"
+      fi
+  loop: "{{ controlplane_nodes }}"
+  delegate_to: "{{ item.hypervisor }}"
+  register: assisted_monitor_vm_restart
+  changed_when: "'RESTARTED' in assisted_monitor_vm_restart.stdout"
+  failed_when: false
+
 - name: Fetch kubeconfig from control-plane-0
   ansible.builtin.command:
     cmd: >-
