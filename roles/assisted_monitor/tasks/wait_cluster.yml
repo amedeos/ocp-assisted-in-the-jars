@@ -122,12 +122,12 @@
   register: assisted_monitor_co
   until: >-
     assisted_monitor_co.rc == 0 and
-    (assisted_monitor_co.stdout | from_json).items |
+    (assisted_monitor_co.stdout | from_json)['items'] |
       map(attribute='status.conditions') | flatten |
       selectattr('type', 'eq', 'Degraded') |
       selectattr('status', 'eq', 'True') | list | length == 0
     and
-    (assisted_monitor_co.stdout | from_json).items |
+    (assisted_monitor_co.stdout | from_json)['items'] |
       map(attribute='status.conditions') | flatten |
       selectattr('type', 'eq', 'Available') |
       rejectattr('status', 'eq', 'True') | list | length == 0
@@ -141,12 +141,12 @@
     msg: "Timed out waiting for all cluster operators to be available and not degraded."
   when: >-
     assisted_monitor_co.rc != 0 or
-    (assisted_monitor_co.stdout | from_json).items |
+    (assisted_monitor_co.stdout | from_json)['items'] |
       map(attribute='status.conditions') | flatten |
       selectattr('type', 'eq', 'Degraded') |
       selectattr('status', 'eq', 'True') | list | length > 0
     or
-    (assisted_monitor_co.stdout | from_json).items |
+    (assisted_monitor_co.stdout | from_json)['items'] |
       map(attribute='status.conditions') | flatten |
       selectattr('type', 'eq', 'Available') |
       rejectattr('status', 'eq', 'True') | list | length > 0
