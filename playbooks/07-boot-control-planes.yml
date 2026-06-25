@@ -27,15 +27,16 @@
           Discovery ISO not found at {{ assisted.discovery_iso_path }}.
           Download it from console.redhat.com and place it at that path.
 
-    - name: Stop control-plane VMs before attaching ISO
+    - name: Stop control-plane VMs before attaching ISO  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         state: destroyed
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
       failed_when: false
+      run_once: true
 
-    - name: Detect cdrom device target for control-plane VMs
+    - name: Detect cdrom device target for control-plane VMs  # noqa: run-once[task]
       ansible.builtin.shell:
         cmd: >-
           set -o pipefail &&
@@ -45,8 +46,9 @@
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
       changed_when: false
+      run_once: true
 
-    - name: Insert discovery ISO into control-plane VMs
+    - name: Insert discovery ISO into control-plane VMs  # noqa: run-once[task]
       ansible.builtin.command:
         cmd: >-
           virsh change-media {{ item.item.name }}
@@ -61,13 +63,15 @@
       failed_when: >-
         cp_iso_insert.rc != 0 and
         'already' not in cp_iso_insert.stderr | default('')
+      run_once: true
 
-    - name: Start control-plane VMs
+    - name: Start control-plane VMs  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         state: running
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
+      run_once: true
 
     - name: Display next steps  # noqa: run-once[task]
       ansible.builtin.debug:

@@ -4,10 +4,11 @@
   become: true
   gather_facts: false
   tasks:
-    - name: Monitor and restart VMs
+    - name: Monitor and restart VMs  # noqa: run-once[task]
       ansible.builtin.include_role:
         name: assisted_monitor
         tasks_from: monitor_vms
+      run_once: true
 
 - name: Wait for OpenShift cluster to be ready
   hosts: utility_vms
