@@ -12,8 +12,8 @@
     cmd: "virsh undefine {{ item.name }} --remove-all-storage"
   loop: "{{ cluster_nodes }}"
   delegate_to: "{{ item.hypervisor }}"
-  register: virsh_undefine
-  changed_when: "'has been undefined' in virsh_undefine.stdout"
+  register: cleanup_virsh_undefine
+  changed_when: "'has been undefined' in cleanup_virsh_undefine.stdout"
   failed_when: false
 
 - name: Remove OSD disks for ceph VM
