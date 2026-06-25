@@ -28,8 +28,9 @@
       --vcpus {{ vm_specs.controlplane.cpu }}
       --memory {{ vm_specs.controlplane.memory_mb }}
       --disk path={{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/{{ item.item.name }}.qcow2
-      --cdrom {{ assisted.discovery_iso_path }}
-      --boot cdrom,hd
+      --disk device=cdrom
+      --boot hd,cdrom
+      --import
       --network bridge={{ hostvars[item.item.hypervisor].bridge_bm | default(bridge_bm) }},mac={{ item.item.mac }},model=virtio
       --graphics spice
       --cpu host-passthrough

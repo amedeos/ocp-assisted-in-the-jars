@@ -25,8 +25,42 @@
         that: iso_stat.stat.exists
         fail_msg: >-
           Discovery ISO not found at {{ assisted.discovery_iso_path }}.
-          Download it from console.redhat.com (Assisted Installer)
-          and place it at that path.
+          Download it from console.redhat.com and place it at that path.
+
+    - name: Detect cdrom device target for control-plane VMs
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          virsh domblklist {{ item.name }} --details |
+          awk '$2 == "cdrom" { print $3 }'
+      register: cp_cdrom_targets
+      loop: "{{ controlplane_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      changed_when: false
+
+    - name: Insert discovery ISO into control-plane VMs
+      ansible.builtin.command:
+        cmd: >-
+          virsh change-media {{ item.item.name }}
+          {{ item.stdout | trim }}
+          {{ assisted.discovery_iso_path }}
+          --insert
+      loop: "{{ cp_cdrom_targets.results }}"
+      when: item.stdout | trim | length > 0
+      delegate_to: "{{ item.item.hypervisor }}"
+      register: cp_iso_insert
+      changed_when: "'Successfully inserted' in cp_iso_insert.stdout | default('')"
+      failed_when: >-
+        cp_iso_insert.rc != 0 and
+        'already in use' not in cp_iso_insert.stderr | default('')
+
+    - name: Stop control-plane VMs for clean boot from ISO
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        state: destroyed
+      loop: "{{ controlplane_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      failed_when: false
 
     - name: Start control-plane VMs
       community.libvirt.virt:
