@@ -1,6 +1,6 @@
 ---
 - name: Check if utility VM already exists
-  ansible.builtin.command: "virsh dominfo {{ item.name }}"
+  ansible.builtin.command: "virsh domstate {{ item.name }}"
   register: vm_create_utility_exists
   changed_when: false
   failed_when: false
@@ -39,8 +39,9 @@
 
 - name: Wait for utility VM to be reachable via SSH
   ansible.builtin.wait_for:
-    host: "{{ item.ip }}"
+    host: "{{ item.item.ip }}"
     port: 22
     delay: 10
     timeout: 300
-  loop: "{{ utility_nodes }}"
+  loop: "{{ vm_create_utility_exists.results }}"
+  when: item.stdout | default('') | trim != 'running'
