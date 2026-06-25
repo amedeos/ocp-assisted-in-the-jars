@@ -1,28 +1,58 @@
 ---
-- name: Gracefully shut down all VMs
+- name: Gracefully shut down OpenShift nodes
+  hosts: utility_vms
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Pre-pull debug image on all nodes
+      ansible.builtin.shell:
+        cmd: >-
+          for node in $(oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+          get nodes -o jsonpath='{.items[*].metadata.name}'); do
+            oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+            debug node/${node} -- chroot /host echo ready;
+          done
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+
+    - name: Schedule shutdown on all OpenShift nodes
+      ansible.builtin.shell:
+        cmd: >-
+          for node in $(oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+          get nodes -o jsonpath='{.items[*].metadata.name}'); do
+            oc --kubeconfig {{ ocp_client_kubeconfig_path }}
+            debug node/${node} -- chroot /host shutdown -h 2;
+          done
+      changed_when: true
+      failed_when: false
+      ignore_unreachable: true
+
+- name: Wait for control-plane VMs to stop and shut down remaining VMs
   hosts: hypervisors
   become: true
   gather_facts: false
   tasks:
-    - name: Shut down control-plane VMs  # noqa: run-once[task]
-      community.libvirt.virt:
-        name: "{{ item.name }}"
-        state: shutdown
-      loop: "{{ controlplane_nodes }}"
-      delegate_to: "{{ item.hypervisor }}"
-      failed_when: false
-      run_once: true
-
-    - name: Wait for control-plane VMs to stop  # noqa: run-once[task]
-      community.libvirt.virt:
-        name: "{{ item.name }}"
-        command: status
-      register: cp_status
-      until: cp_status.status in ['shutdown', 'shutoff']
+    - name: Wait for control-plane VMs to be shut off  # noqa: run-once[task]
+      ansible.builtin.command:
+        cmd: "virsh domstate {{ item.name }}"
+      register: cp_shutdown_status
+      until: cp_shutdown_status.stdout | trim == 'shut off'
       retries: 30
       delay: 10
       loop: "{{ controlplane_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
+      changed_when: false
+      failed_when: false
+      run_once: true
+
+    - name: Force off control-plane VMs still running  # noqa: run-once[task]
+      community.libvirt.virt:
+        name: "{{ item.item.name }}"
+        state: destroyed
+      loop: "{{ cp_shutdown_status.results }}"
+      when: item.stdout | default('') | trim != 'shut off'
+      delegate_to: "{{ item.item.hypervisor }}"
       failed_when: false
       run_once: true
 
@@ -35,11 +65,37 @@
       failed_when: false
       run_once: true
 
+    - name: Wait for ceph VM to be shut off  # noqa: run-once[task]
+      ansible.builtin.command:
+        cmd: "virsh domstate {{ item.name }}"
+      register: ceph_shutdown_status
+      until: ceph_shutdown_status.stdout | trim == 'shut off'
+      retries: 30
+      delay: 10
+      loop: "{{ ceph_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      changed_when: false
+      failed_when: false
+      run_once: true
+
     - name: Shut down utility VM  # noqa: run-once[task]
       community.libvirt.virt:
         name: "{{ item.name }}"
         state: shutdown
       loop: "{{ utility_nodes }}"
       delegate_to: "{{ item.hypervisor }}"
+      failed_when: false
+      run_once: true
+
+    - name: Wait for utility VM to be shut off  # noqa: run-once[task]
+      ansible.builtin.command:
+        cmd: "virsh domstate {{ item.name }}"
+      register: utility_shutdown_status
+      until: utility_shutdown_status.stdout | trim == 'shut off'
+      retries: 30
+      delay: 10
+      loop: "{{ utility_nodes }}"
+      delegate_to: "{{ item.hypervisor }}"
+      changed_when: false
       failed_when: false
       run_once: true
