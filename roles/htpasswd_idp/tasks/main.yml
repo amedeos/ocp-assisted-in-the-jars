@@ -118,6 +118,14 @@
     path: /tmp/htpasswd-login-test
     state: absent
 
+- name: Remove kubeadmin user
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ htpasswd_idp_kubeconfig_path }}
+      delete secret kubeadmin -n kube-system --ignore-not-found
+  register: htpasswd_idp_kubeadmin_delete
+  changed_when: "'deleted' in htpasswd_idp_kubeadmin_delete.stdout"
+
 - name: Display HTPasswd configuration summary
   ansible.builtin.debug:
     msg:
