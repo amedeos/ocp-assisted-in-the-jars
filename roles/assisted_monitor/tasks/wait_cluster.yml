@@ -122,7 +122,7 @@
   ansible.builtin.debug:
     msg: "Cluster version {{ assisted_monitor_cv_version }} is available"
 
-- name: Wait for all cluster operators to be available and not degraded
+- name: Wait for all cluster operators to be available, not progressing and not degraded
   ansible.builtin.command:
     cmd: >-
       oc --kubeconfig {{ assisted_monitor_kubeconfig_path }}
@@ -133,14 +133,20 @@
     (assisted_monitor_co.stdout | from_json)['items'] |
       selectattr('status.conditions', 'defined') |
       map(attribute='status.conditions') | flatten |
-      selectattr('type', 'eq', 'Degraded') |
+      selectattr('type', 'eq', 'Available') |
+      rejectattr('status', 'eq', 'True') | list | length == 0
+    and
+    (assisted_monitor_co.stdout | from_json)['items'] |
+      selectattr('status.conditions', 'defined') |
+      map(attribute='status.conditions') | flatten |
+      selectattr('type', 'eq', 'Progressing') |
       selectattr('status', 'eq', 'True') | list | length == 0
     and
     (assisted_monitor_co.stdout | from_json)['items'] |
       selectattr('status.conditions', 'defined') |
       map(attribute='status.conditions') | flatten |
-      selectattr('type', 'eq', 'Available') |
-      rejectattr('status', 'eq', 'True') | list | length == 0
+      selectattr('type', 'eq', 'Degraded') |
+      selectattr('status', 'eq', 'True') | list | length == 0
   retries: "{{ assisted_monitor_cluster_retries }}"
   delay: "{{ assisted_monitor_cluster_delay }}"
   changed_when: false
@@ -148,25 +154,31 @@
 
 - name: Fail if cluster operators are not ready
   ansible.builtin.fail:
-    msg: "Timed out waiting for all cluster operators to be available and not degraded."
+    msg: "Timed out waiting for all cluster operators to be ready."
   when: >-
     assisted_monitor_co.rc != 0 or
     (assisted_monitor_co.stdout | from_json)['items'] |
       selectattr('status.conditions', 'defined') |
       map(attribute='status.conditions') | flatten |
-      selectattr('type', 'eq', 'Degraded') |
+      selectattr('type', 'eq', 'Available') |
+      rejectattr('status', 'eq', 'True') | list | length > 0
+    or
+    (assisted_monitor_co.stdout | from_json)['items'] |
+      selectattr('status.conditions', 'defined') |
+      map(attribute='status.conditions') | flatten |
+      selectattr('type', 'eq', 'Progressing') |
       selectattr('status', 'eq', 'True') | list | length > 0
     or
     (assisted_monitor_co.stdout | from_json)['items'] |
       selectattr('status.conditions', 'defined') |
       map(attribute='status.conditions') | flatten |
-      selectattr('type', 'eq', 'Available') |
-      rejectattr('status', 'eq', 'True') | list | length > 0
+      selectattr('type', 'eq', 'Degraded') |
+      selectattr('status', 'eq', 'True') | list | length > 0
 
 - name: Display cluster readiness summary
   ansible.builtin.debug:
     msg:
       - "OpenShift cluster is ready!"
       - "Version: {{ assisted_monitor_cv_version }}"
-      - "All cluster operators are Available and not Degraded."
+      - "All cluster operators: Available=True, Progressing=False, Degraded=False."
       - "Proceeding with post-install configuration..."
