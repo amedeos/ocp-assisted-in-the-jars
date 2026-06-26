@@ -32,6 +32,11 @@
       when: api_vip_check.state | default('') != 'started'
       run_once: true
 
+    - name: Refresh libvirt default storage pool
+      ansible.builtin.command: virsh pool-refresh default
+      changed_when: true
+      when: api_vip_check.state | default('') != 'started'
+
     - name: Verify discovery ISO exists
       ansible.builtin.stat:
         path: "{{ assisted.discovery_iso_path }}"
