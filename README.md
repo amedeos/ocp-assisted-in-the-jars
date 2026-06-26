@@ -40,7 +40,7 @@ Control-plane VMs use `host-passthrough` CPU mode for OpenShift Virtualization s
 - **Discovery ISO**: Generated from [Assisted Installer](https://console.redhat.com/openshift/assisted-installer/clusters) -- the playbook prompts for it at stage 07 (not needed upfront)
 - **Ansible**: >= 2.15 with required collections (`make collections`)
 - **Packages on hypervisor**: `qemu`, `libvirt`, `libguestfs-tools`, `virt-install`
-- **RAM**: Minimum ~210GB for all VMs on a single host
+- **Memory**: Minimum ~210GB (RAM + swap) for all VMs on a single host
 - **Disk**: Minimum ~500GB in `/var/lib/libvirt/images`
 
 ## Quick start

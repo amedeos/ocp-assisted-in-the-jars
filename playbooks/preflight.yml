@@ -105,10 +105,12 @@
           Insufficient disk space in {{ image_dir }}.
           Available: {{ available_disk_gb }}G, Required: >= 500G
 
-    # ---- RAM ----
-    - name: Get total RAM
+    # ---- RAM + swap ----
+    - name: Calculate available memory (RAM + swap)
       ansible.builtin.set_fact:
         total_ram_mb: "{{ ansible_facts['memtotal_mb'] }}"
+        total_swap_mb: "{{ ansible_facts['swaptotal_mb'] | default(0) }}"
+        available_memory_mb: "{{ ansible_facts['memtotal_mb'] | int + ansible_facts['swaptotal_mb'] | default(0) | int }}"
 
     - name: Calculate required RAM for VMs on this hypervisor
       ansible.builtin.set_fact:
@@ -122,12 +124,13 @@
             | map('int')
             | sum }}
 
-    - name: Verify sufficient RAM
+    - name: Verify sufficient memory (RAM + swap)
       ansible.builtin.assert:
-        that: total_ram_mb | int >= required_ram_mb | int
+        that: available_memory_mb | int >= required_ram_mb | int
         fail_msg: >-
-          Insufficient RAM on {{ inventory_hostname }}.
-          Available: {{ total_ram_mb }}MB, Required: {{ required_ram_mb }}MB
+          Insufficient memory on {{ inventory_hostname }}.
+          RAM: {{ total_ram_mb }}MB + Swap: {{ total_swap_mb }}MB = {{ available_memory_mb }}MB,
+          Required: {{ required_ram_mb }}MB
 
     # ---- Base image ----
     - name: Check RHEL base image exists
@@ -153,5 +156,5 @@
           - "  IP forwarding: OK"
           - "  Nested virt: OK"
           - "  Disk space: {{ available_disk_gb }}G available"
-          - "  RAM: {{ total_ram_mb }}MB available ({{ required_ram_mb }}MB required)"
+          - "  Memory: {{ total_ram_mb }}MB RAM + {{ total_swap_mb }}MB swap = {{ available_memory_mb }}MB ({{ required_ram_mb }}MB required)"
           - "  Base image: OK"
