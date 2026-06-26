@@ -1,0 +1,8 @@
+---
+- name: Create libvirt NAT network
+  ansible.builtin.include_tasks: nat.yml
+  when: network_mode == 'nat'
+
+- name: Configure port forwarding
+  ansible.builtin.include_tasks: portfw.yml
+  when: network_enable_portfw | bool

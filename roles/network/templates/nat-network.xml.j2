@@ -1,0 +1,7 @@
+<network>
+  <name>{{ libvirt_network.name }}</name>
+  <forward mode="nat"/>
+  <bridge name="{{ libvirt_network.bridge_name }}" stp="off" delay="0"/>
+  <ip address="{{ baremetal_net.gateway }}" netmask="{{ baremetal_net.netmask }}">
+  </ip>
+</network>

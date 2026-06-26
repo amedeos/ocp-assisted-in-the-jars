@@ -1,0 +1,3 @@
+---
+network_enable_portfw: "{{ hypervisor.enable_portfw | default(true) }}"
+network_wan_interface: "{{ hypervisor.wan_interface | default('eth0') }}"

@@ -20,11 +20,13 @@ VMs created:
 
 ```bash
 ansible-galaxy collection install -r requirements.yml  # install deps
-make deploy                                            # full deployment
+make prepare-network                                   # one-time network setup on hypervisor
+make deploy                                            # full deployment (never modifies hypervisor)
 make preflight                                         # read-only checks
 make lint                                              # ansible-lint
 make check                                             # dry run
-make cleanup                                           # destroy everything
+make cleanup                                           # destroy VMs only
+make cleanup-network                                   # destroy hypervisor network
 make deploy INVENTORY=/path/to/hosts.yml \
             CUSTOM_VARS=/path/to/vars.yml              # multi-hypervisor (both required)
 ```
@@ -45,14 +47,31 @@ make deploy INVENTORY=/path/to/hosts.yml \
 
 ### Execution flow
 
-1. **preflight** -- read-only validation (bridge, KVM, disk, RAM)
+`make deploy` **never modifies the hypervisor**. Network and
+hypervisor preparation are one-time prerequisites the user runs
+explicitly via `make prepare-network`.
+
+1. **preflight** -- read-only validation (network, KVM, disk, RAM)
 2. **01** -- generate SSH key pair
-3. **02** -- configure hypervisor (iptables NAT/DNAT, nested virt)
-4. **03** -- download and customize RHEL 10 golden images
-5. **04** -- create libvirt VMs (utility, ceph, 3 control-planes)
-6. **05** -- configure dnsmasq on utility VM
-7. **06** -- bootstrap single-node Ceph with 3 OSDs
-8. **07** -- boot control-planes from discovery ISO
+3. **03** -- download and customize RHEL 10 golden images
+4. **04** -- create libvirt VMs (utility, ceph, 3 control-planes)
+5. **05** -- configure dnsmasq on utility VM
+6. **06** -- bootstrap single-node Ceph with 3 OSDs
+7. **07** -- boot control-planes from discovery ISO
+
+### Network modes
+
+Controlled by `network_mode` in `group_vars/all/main.yml`:
+
+- **`nat`** (default) -- Ansible creates a libvirt NAT network
+  (`make prepare-network`). No manual bridge needed. Best for
+  single-host localhost deployments.
+- **`bridge`** -- user provides a pre-existing bridge (`bridge_bm`).
+  Required for multi-hypervisor setups where VMs must share an
+  L2 domain.
+
+DNAT port forwarding (443/6443) is configured by
+`make prepare-network` in both modes when `enable_portfw` is true.
 
 ### Node definitions
 
@@ -107,3 +126,7 @@ credentials.
 7. **Run `make lint` after every change** to playbooks or roles.
    It must pass with zero errors before committing. CI enforces
    this via GitHub Actions (ansible-lint + yamllint + syntax-check).
+8. **`make deploy` must never modify the hypervisor.** Network
+   setup and hypervisor configuration are one-time prerequisites
+   run explicitly by the user (`make prepare-network`). The deploy
+   pipeline only validates (preflight) and creates/configures VMs.

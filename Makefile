@@ -1,5 +1,6 @@
 .PHONY: help deploy preflight ssh-key ssh-config create-utility create-vms configure-utility configure-ceph \
         boot-control-planes monitor-installation post-install configure-odf cleanup startup shutdown lint check \
+        prepare-network cleanup-network \
         vault-edit vault-encrypt vault-decrypt \
         pull-secret-encrypt pull-secret-decrypt collections
 
@@ -33,6 +34,12 @@ ssh-key: ## Generate SSH key pair (run before creating cluster on console.redhat
 
 preflight: ## Run pre-flight validation only (read-only)
 	$(ANSIBLE_CMD) playbooks/preflight.yml
+
+prepare-network: ## Create network on hypervisor (run once before first deploy)
+	$(ANSIBLE_CMD) playbooks/prepare-network.yml
+
+cleanup-network: ## Destroy hypervisor network (libvirt NAT mode only)
+	$(ANSIBLE_CMD) playbooks/cleanup-network.yml
 
 ssh-config: ## Add VM entries to ~/.ssh/config
 	$(ANSIBLE_CMD) playbooks/04c-ssh-config.yml

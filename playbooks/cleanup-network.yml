@@ -1,0 +1,57 @@
+---
+- name: Destroy hypervisor network
+  hosts: hypervisors
+  become: true
+  gather_facts: false
+  tasks:
+    # ---- Libvirt NAT network ----
+    - name: Check if libvirt network exists
+      ansible.builtin.command: "virsh net-info {{ libvirt_network.name }}"
+      register: cleanup_net_info
+      changed_when: false
+      failed_when: false
+      when: network_mode == 'nat'
+
+    - name: Destroy libvirt network
+      ansible.builtin.command: "virsh net-destroy {{ libvirt_network.name }}"
+      when:
+        - network_mode == 'nat'
+        - cleanup_net_info.rc == 0
+      register: cleanup_net_destroy
+      changed_when: true
+      failed_when:
+        - cleanup_net_destroy.rc != 0
+        - "'not active' not in cleanup_net_destroy.stderr"
+
+    - name: Undefine libvirt network
+      ansible.builtin.command: "virsh net-undefine {{ libvirt_network.name }}"
+      when:
+        - network_mode == 'nat'
+        - cleanup_net_info.rc == 0
+      changed_when: true
+      failed_when: false
+
+    # ---- DNAT rules ----
+    - name: Remove DNAT rule for port 443
+      ansible.builtin.iptables:
+        table: nat
+        chain: PREROUTING
+        in_interface: "{{ hypervisor.wan_interface | default('eth0') }}"
+        protocol: tcp
+        destination_port: "443"
+        jump: DNAT
+        to_destination: "{{ vip.ingress }}:443"
+        state: absent
+      failed_when: false
+
+    - name: Remove DNAT rule for port 6443
+      ansible.builtin.iptables:
+        table: nat
+        chain: PREROUTING
+        in_interface: "{{ hypervisor.wan_interface | default('eth0') }}"
+        protocol: tcp
+        destination_port: "6443"
+        jump: DNAT
+        to_destination: "{{ vip.api }}:6443"
+        state: absent
+      failed_when: false

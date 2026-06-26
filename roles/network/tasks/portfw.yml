@@ -1,0 +1,32 @@
+---
+- name: Enable IP forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: DNAT port 443 to ingress VIP
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    in_interface: "{{ network_wan_interface }}"
+    protocol: tcp
+    destination_port: "443"
+    jump: DNAT
+    to_destination: "{{ vip.ingress }}:443"
+    state: present
+  notify: Save iptables
+
+- name: DNAT port 6443 to API VIP
+  ansible.builtin.iptables:
+    table: nat
+    chain: PREROUTING
+    in_interface: "{{ network_wan_interface }}"
+    protocol: tcp
+    destination_port: "6443"
+    jump: DNAT
+    to_destination: "{{ vip.api }}:6443"
+    state: present
+  notify: Save iptables

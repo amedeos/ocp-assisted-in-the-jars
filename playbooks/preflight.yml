@@ -26,18 +26,37 @@
         fail_msg: "libvirtd is not running. Start it with: systemctl start libvirtd"
 
     # ---- Network ----
-    - name: Check bridge exists
+    - name: Check libvirt network is active (NAT mode)
+      ansible.builtin.command: "virsh net-info {{ libvirt_network.name }}"
+      register: net_nat_check
+      changed_when: false
+      failed_when: false
+      when: network_mode == 'nat'
+
+    - name: Verify libvirt network is active (NAT mode)
+      ansible.builtin.assert:
+        that:
+          - net_nat_check.rc == 0
+          - "'Active:          yes' in net_nat_check.stdout"
+        fail_msg: >-
+          Libvirt network '{{ libvirt_network.name }}' not found or not active.
+          Run 'make prepare-network' before the deployment.
+      when: network_mode == 'nat'
+
+    - name: Check bridge exists (bridge mode)
       ansible.builtin.command: "ip link show {{ bridge_bm }}"
       register: bridge_check
       changed_when: false
       failed_when: false
+      when: network_mode == 'bridge'
 
-    - name: Verify bridge is present
+    - name: Verify bridge is present (bridge mode)
       ansible.builtin.assert:
         that: bridge_check.rc == 0
         fail_msg: >-
           Bridge '{{ bridge_bm }}' not found. Create it manually on the hypervisor
           before running the deployment.
+      when: network_mode == 'bridge'
 
     - name: Check IP forwarding
       ansible.builtin.command: sysctl -n net.ipv4.ip_forward
@@ -130,7 +149,7 @@
           - "All pre-flight checks passed on {{ inventory_hostname }}"
           - "  KVM: OK"
           - "  libvirtd: OK"
-          - "  Bridge {{ bridge_bm }}: OK"
+          - "  Network ({{ network_mode }}): OK"
           - "  IP forwarding: OK"
           - "  Nested virt: OK"
           - "  Disk space: {{ available_disk_gb }}G available"
