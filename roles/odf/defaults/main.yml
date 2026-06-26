@@ -1,6 +1,5 @@
 ---
 odf_namespace: openshift-storage
-odf_channel: "stable-4.21"
 odf_catalog_source: redhat-operators
 odf_operator_name: odf-operator
 odf_ceph_client_name: client.openshift

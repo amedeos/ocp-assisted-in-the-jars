@@ -4,9 +4,6 @@ cluster_name: ocp-lab
 base_domain: example.com
 domain: "{{ cluster_name }}.{{ base_domain }}"
 
-# OpenShift version
-ocp_version: "4.22"
-
 # Base OS image (RHEL 10 for utility and ceph VMs)
 supported_os: rhel10
 image: rhel-10.2-x86_64-kvm.qcow2

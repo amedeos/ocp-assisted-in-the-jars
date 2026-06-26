@@ -73,6 +73,15 @@ Controlled by `network_mode` in `group_vars/all/main.yml`:
 DNAT port forwarding (443/6443) is configured by
 `make prepare-network` in both modes when `enable_portfw` is true.
 
+### ODF channel auto-detection
+
+The ODF operator channel is derived at runtime from the cluster
+version (e.g., OCP 4.22.1 → `stable-4.22`). The OCP version is
+chosen on console.redhat.com, not in Ansible variables.
+
+To override (e.g., ODF 4.22 not yet released), set
+`odf_channel_override: "stable-4.21"` in extra-vars or group_vars.
+
 ### Node definitions
 
 All VMs defined in `inventory/group_vars/all/main.yml` under

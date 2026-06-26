@@ -1,4 +1,27 @@
 ---
+- name: Detect cluster version for ODF channel
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ odf_kubeconfig_path }}
+      get clusterversion version
+      -o jsonpath='{.status.history[0].version}'
+  register: odf_cluster_version
+  changed_when: false
+
+- name: Set ODF channel from cluster version
+  ansible.builtin.set_fact:
+    odf_channel: "stable-{{ odf_cluster_version.stdout.split('.')[:2] | join('.') }}"
+  when: odf_channel_override is not defined
+
+- name: Use user-defined ODF channel override
+  ansible.builtin.set_fact:
+    odf_channel: "{{ odf_channel_override }}"
+  when: odf_channel_override is defined
+
+- name: Display ODF channel
+  ansible.builtin.debug:
+    msg: "ODF channel: {{ odf_channel }} (cluster version: {{ odf_cluster_version.stdout }})"
+
 - name: Get Ceph FSID
   ansible.builtin.command: ceph fsid
   register: odf_ceph_fsid_result

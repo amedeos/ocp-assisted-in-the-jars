@@ -4,6 +4,6 @@ assisted_monitor_vm_delay: 30
 assisted_monitor_cluster_retries: 120
 assisted_monitor_cluster_delay: 30
 assisted_monitor_ssh_timeout: 3600
-assisted_monitor_oc_url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-{{ ocp_version }}/openshift-client-linux.tar.gz"
+assisted_monitor_oc_url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz"
 assisted_monitor_kubeconfig_path: /root/kubeconfig-int
 assisted_monitor_kubeconfig_src: /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/lb-int.kubeconfig
