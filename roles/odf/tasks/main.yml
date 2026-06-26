@@ -117,6 +117,16 @@
     odf_console_plugin.rc != 0 and
     'already exists' not in odf_console_plugin.stderr | default('')
 
+- name: Set CephRBD StorageClass as default
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ odf_kubeconfig_path }}
+      annotate storageclass ocs-external-storagecluster-ceph-rbd
+      storageclass.kubernetes.io/is-default-class=true
+      --overwrite
+  register: odf_default_sc
+  changed_when: "'annotated' in odf_default_sc.stdout | default('')"
+
 - name: Display StorageClasses
   ansible.builtin.command:
     cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} get sc"
