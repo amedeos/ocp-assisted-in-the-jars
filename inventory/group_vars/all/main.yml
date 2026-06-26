@@ -11,8 +11,14 @@ ocp_version: "4.22"
 supported_os: rhel10
 image: rhel-10.2-x86_64-kvm.qcow2
 image_location: /root/images/rhel-10.2-x86_64-kvm.qcow2
-# Network - single baremetal network (bridge is a manual prerequisite)
+# Network mode: nat (default, libvirt-managed) or bridge (manual prerequisite)
+network_mode: nat
 bridge_bm: bm
+
+# Libvirt NAT network (used when network_mode: nat)
+libvirt_network:
+  name: ocp-lab-nat
+  bridge_name: ocp-lab
 
 baremetal_net:
   net: 192.168.203.0

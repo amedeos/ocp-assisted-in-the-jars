@@ -28,10 +28,15 @@
       --memory {{ vm_specs.utility.memory_mb }}
       --disk path={{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/{{ item.item.name }}.qcow2
       --import
-      --network bridge={{ hostvars[item.item.hypervisor].bridge_bm | default(bridge_bm) }},mac={{ item.item.mac }},model=virtio
+      --network {{ _network_spec }},mac={{ item.item.mac }},model=virtio
       --graphics spice
       --cpu host-model
       --noautoconsole
+  vars:
+    _network_spec: >-
+      {{ 'network=' + libvirt_network.name
+      if network_mode == 'nat'
+      else 'bridge=' + (hostvars[item.item.hypervisor].bridge_bm | default(bridge_bm)) }}
   loop: "{{ vm_create_utility_exists.results }}"
   when: item.rc != 0
   delegate_to: "{{ item.item.hypervisor }}"

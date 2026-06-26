@@ -1,0 +1,37 @@
+---
+- name: Check if libvirt network exists
+  ansible.builtin.command: "virsh net-info {{ libvirt_network.name }}"
+  register: network_nat_info
+  changed_when: false
+  failed_when: false
+
+- name: Template libvirt network XML
+  ansible.builtin.template:
+    src: nat-network.xml.j2
+    dest: "/tmp/{{ libvirt_network.name }}.xml"
+    mode: "0644"
+  when: network_nat_info.rc != 0
+
+- name: Define libvirt network
+  ansible.builtin.command: "virsh net-define /tmp/{{ libvirt_network.name }}.xml"
+  when: network_nat_info.rc != 0
+  changed_when: true
+
+- name: Remove temporary network XML
+  ansible.builtin.file:
+    path: "/tmp/{{ libvirt_network.name }}.xml"
+    state: absent
+
+- name: Start libvirt network
+  ansible.builtin.command: "virsh net-start {{ libvirt_network.name }}"
+  register: network_nat_start
+  changed_when: true
+  failed_when:
+    - network_nat_start.rc != 0
+    - "'already active' not in network_nat_start.stderr"
+
+- name: Enable libvirt network autostart
+  ansible.builtin.command: "virsh net-autostart {{ libvirt_network.name }}"
+  register: network_nat_autostart
+  changed_when: "'marked as autostarted' in network_nat_autostart.stdout"
+  failed_when: false

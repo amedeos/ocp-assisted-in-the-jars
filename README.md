@@ -7,7 +7,9 @@ Deploy a 3-node compact OpenShift cluster using the **Assisted Installer** on KV
 ```
 [Hypervisor(s) - Gentoo Linux, KVM, nested virt]
    |
-   +-- bridge: bm (192.168.203.0/24)
+   +-- network: 192.168.203.0/24
+   |   (NAT mode: libvirt-managed network, default)
+   |   (Bridge mode: manual bridge for multi-hypervisor)
          |
          +-- utility         (.254) -- dnsmasq (DNS+DHCP), RHEL 10
          +-- ceph             (.252) -- cephadm single-node, 3 OSD, RHEL 10
@@ -32,7 +34,7 @@ Control-plane VMs use `host-passthrough` CPU mode for OpenShift Virtualization s
 ## Prerequisites
 
 - **Hypervisor**: Gentoo Linux (or any Linux with KVM) with nested virtualization enabled
-- **Bridge**: Network bridge `bm` must be created manually on the hypervisor
+- **Network**: Run `make prepare-network` before first deploy (creates libvirt NAT network by default, or set `network_mode: bridge` for a manual bridge)
 - **RHEL image**: `rhel-10.2-x86_64-kvm.qcow2` downloaded from access.redhat.com
 - **Pull secret**: Downloaded from [console.redhat.com](https://console.redhat.com/openshift/install/pull-secret) and saved to `files/pull-secret.txt` (used by cephadm to pull container images from `registry.redhat.io`)
 - **Discovery ISO**: Generated from [Assisted Installer](https://console.redhat.com/openshift/assisted-installer/clusters) -- the playbook prompts for it at stage 07 (not needed upfront)
@@ -64,15 +66,18 @@ make pull-secret-encrypt
 #    /root/images/rhel-10.2-x86_64-kvm.qcow2
 #    (Discovery ISO is downloaded later, before stage 07)
 
-# 6. Create custom inventory and vars (multi-hypervisor)
+# 6. Prepare network (one-time, creates libvirt NAT network by default)
+make prepare-network
+
+# 7. Create custom inventory and vars (multi-hypervisor)
 cp inventory/hosts-multi.yml.example inventory/hosts-mylab.yml
 cp inventory/lab-vars.yml.example inventory/lab-vars.yml
 # Edit both files with your lab values
 
-# 7. Run pre-flight checks
+# 8. Run pre-flight checks
 make preflight INVENTORY=inventory/hosts-mylab.yml CUSTOM_VARS=inventory/lab-vars.yml
 
-# 8. Deploy everything
+# 9. Deploy everything
 make deploy INVENTORY=inventory/hosts-mylab.yml CUSTOM_VARS=inventory/lab-vars.yml
 ```
 
@@ -98,6 +103,19 @@ vi inventory/hosts-mylab.yml inventory/lab-vars.yml
 # 3. Deploy
 make deploy INVENTORY=inventory/hosts-mylab.yml CUSTOM_VARS=inventory/lab-vars.yml
 ```
+
+### Network modes
+
+Controlled by `network_mode` in `inventory/group_vars/all/main.yml`:
+
+| Mode | Default | Network setup | Use case |
+|---|---|---|---|
+| `nat` | **yes** | `make prepare-network` creates a libvirt NAT network | Single-host localhost deployments |
+| `bridge` | no | User creates bridge manually | Multi-hypervisor (VMs share L2 domain) |
+
+In NAT mode, DHCP is **not** provided by the libvirt network -- the utility VM runs dnsmasq for DNS and DHCP. DNAT port forwarding (443 and 6443) is configured automatically by `make prepare-network` to expose API and Ingress VIPs.
+
+To switch to bridge mode, set `network_mode: bridge` and ensure `bridge_bm` is configured in your inventory.
 
 ### Per-hypervisor settings
 
@@ -132,7 +150,8 @@ Only include the roles you want to override; defaults for the rest come from `in
 
 | Target | Description |
 |---|---|
-| `make deploy` | Full deployment |
+| `make prepare-network` | Create network on hypervisor (run once before first deploy) |
+| `make deploy` | Full deployment (never modifies hypervisor) |
 | `make preflight` | Read-only pre-flight checks |
 | `make ssh-key` | Generate SSH key pair |
 | `make ssh-config` | Add VM entries to ~/.ssh/config |
@@ -144,7 +163,8 @@ Only include the roles you want to override; defaults for the rest come from `in
 | `make monitor-installation` | Monitor Assisted Installer and wait for cluster ready |
 | `make post-install` | Setup oc client and kubeconfig on utility VM |
 | `make configure-odf` | Install ODF with external Ceph storage |
-| `make cleanup` | Destroy everything and remove SSH config |
+| `make cleanup` | Destroy VMs and remove SSH config |
+| `make cleanup-network` | Destroy hypervisor network (libvirt NAT mode only) |
 | `make startup` | Start all VMs (utility → ceph → control-planes, with health checks) |
 | `make shutdown` | Graceful shutdown (oc debug shutdown → wait → ceph → utility) |
 | `make lint` | Lint and syntax check |
@@ -155,6 +175,7 @@ Only include the roles you want to override; defaults for the rest come from `in
 
 ## Execution flow
 
+0. **prepare-network** -- one-time hypervisor network setup (`make prepare-network`, not part of deploy)
 1. **preflight** -- validates prerequisites (read-only)
 2. **01-create-ssh-key** -- generates ed25519 SSH key pair
 3. **03-prepare-images** -- customizes RHEL 10 golden images (utility, ceph)
