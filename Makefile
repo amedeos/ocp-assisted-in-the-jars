@@ -15,8 +15,14 @@ ifdef CUSTOM_VARS
   EXTRA_VARS := -e @$(CUSTOM_VARS)
 endif
 
+ifneq ($(wildcard $(VAULT_PASS_FILE)),)
+  VAULT_OPT := --vault-password-file $(VAULT_PASS_FILE)
+else
+  VAULT_OPT := --ask-vault-pass
+endif
+
 ANSIBLE_CMD = ansible-playbook $(INVENTORY_OPT) \
-              --vault-password-file $(VAULT_PASS_FILE) \
+              $(VAULT_OPT) \
               $(EXTRA_VARS) $(ANSIBLE_OPTS)
 
 help: ## Show this help
@@ -86,20 +92,20 @@ check: ## Run deployment in check mode (dry run)
 
 vault-edit: ## Edit the encrypted vault file
 	ansible-vault edit inventory/group_vars/all/vault.yml \
-	  --vault-password-file $(VAULT_PASS_FILE)
+	  $(VAULT_OPT)
 
 vault-encrypt: ## Encrypt the vault file
 	ansible-vault encrypt inventory/group_vars/all/vault.yml \
-	  --vault-password-file $(VAULT_PASS_FILE)
+	  $(VAULT_OPT)
 
 vault-decrypt: ## Decrypt the vault file (for manual editing)
 	ansible-vault decrypt inventory/group_vars/all/vault.yml \
-	  --vault-password-file $(VAULT_PASS_FILE)
+	  $(VAULT_OPT)
 
 pull-secret-encrypt: ## Encrypt the pull secret file
 	ansible-vault encrypt files/pull-secret.txt \
-	  --vault-password-file $(VAULT_PASS_FILE)
+	  $(VAULT_OPT)
 
 pull-secret-decrypt: ## Decrypt the pull secret file
 	ansible-vault decrypt files/pull-secret.txt \
-	  --vault-password-file $(VAULT_PASS_FILE)
+	  $(VAULT_OPT)
