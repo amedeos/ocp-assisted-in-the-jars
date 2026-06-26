@@ -1,5 +1,5 @@
 .PHONY: help deploy preflight ssh-key ssh-config create-utility create-vms configure-utility configure-ceph \
-        boot-control-planes monitor-installation post-install configure-odf cleanup startup shutdown lint check \
+        boot-control-planes monitor-installation post-install configure-odf configure-htpasswd cleanup startup shutdown lint check \
         prepare-network cleanup-network \
         vault-edit vault-encrypt vault-decrypt \
         pull-secret-encrypt pull-secret-decrypt collections
@@ -73,6 +73,9 @@ post-install: ## Setup oc client and kubeconfig on utility VM
 
 configure-odf: ## Install ODF with external Ceph storage
 	$(ANSIBLE_CMD) playbooks/09-configure-odf.yml
+
+configure-htpasswd: ## Configure HTPasswd identity provider with users
+	$(ANSIBLE_CMD) playbooks/10-configure-htpasswd.yml
 
 cleanup: ## Destroy all VMs and remove images
 	$(ANSIBLE_CMD) playbooks/cleanup.yml

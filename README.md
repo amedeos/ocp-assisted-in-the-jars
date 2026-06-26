@@ -163,6 +163,7 @@ Only include the roles you want to override; defaults for the rest come from `in
 | `make monitor-installation` | Monitor Assisted Installer and wait for cluster ready |
 | `make post-install` | Setup oc client and kubeconfig on utility VM |
 | `make configure-odf` | Install ODF with external Ceph storage |
+| `make configure-htpasswd` | Configure HTPasswd identity provider with users |
 | `make cleanup` | Destroy VMs and remove SSH config |
 | `make cleanup-network` | Destroy hypervisor network (libvirt NAT mode only) |
 | `make startup` | Start all VMs (utility → ceph → control-planes, with health checks) |
@@ -188,6 +189,7 @@ Only include the roles you want to override; defaults for the rest come from `in
 10. **07b-monitor-installation** -- waits for API VIP, restarts shut-off VMs without ISO, monitors kubeconfig/clusterversion/cluster operators
 11. **08-post-install** -- installs oc client, fetches kubeconfig on utility VM
 12. **09-configure-odf** -- deploys ODF operator with external Ceph storage, enables odf-console plugin
+13. **10-configure-htpasswd** -- configures HTPasswd identity provider (admin, reader, test01-03) with ClusterRoleBindings
 
 ## Secrets
 
@@ -203,5 +205,6 @@ Variables in vault.yml:
 - `secure_password` -- root password for utility and ceph VMs
 - `rh_activation_key` -- Red Hat activation key ([registration](https://console.redhat.com/insights/registration), [manage keys](https://console.redhat.com/insights/connector/activation-keys))
 - `rh_org_id` -- Red Hat organization ID
+- `htpasswd_admin_password` -- password for HTPasswd users (generate with `openssl rand -hex 30`)
 
 Never commit vault files or SSH keys.

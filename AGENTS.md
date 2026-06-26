@@ -58,6 +58,9 @@ explicitly via `make prepare-network`.
 5. **05** -- configure dnsmasq on utility VM
 6. **06** -- bootstrap single-node Ceph with 3 OSDs
 7. **07** -- boot control-planes from discovery ISO
+8. **08** -- post-install (oc client, kubeconfig)
+9. **09** -- configure ODF with external Ceph
+10. **10** -- configure HTPasswd identity provider
 
 ### Network modes
 

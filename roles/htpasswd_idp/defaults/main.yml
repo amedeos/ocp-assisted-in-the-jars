@@ -1,0 +1,16 @@
+---
+htpasswd_idp_kubeconfig_path: /root/kubeconfig-int
+
+htpasswd_idp_users:
+  - name: admin
+    password: "{{ htpasswd_admin_password }}"
+    cluster_role: cluster-admin
+  - name: reader
+    password: "{{ htpasswd_reader_password | default(htpasswd_admin_password) }}"
+    cluster_role: cluster-reader
+  - name: test01
+    password: "{{ htpasswd_test01_password | default(htpasswd_admin_password) }}"
+  - name: test02
+    password: "{{ htpasswd_test02_password | default(htpasswd_admin_password) }}"
+  - name: test03
+    password: "{{ htpasswd_test03_password | default(htpasswd_admin_password) }}"

@@ -1,0 +1,129 @@
+---
+- name: Install httpd-tools for htpasswd command
+  ansible.builtin.dnf:
+    name: httpd-tools
+    state: present
+
+- name: Generate htpasswd file
+  ansible.builtin.command:
+    cmd: "htpasswd -bBn {{ item.name }} {{ item.password }}"
+  loop: "{{ htpasswd_idp_users }}"
+  register: htpasswd_idp_entries
+  changed_when: false
+  no_log: true
+
+- name: Write htpasswd file
+  ansible.builtin.copy:
+    content: "{{ htpasswd_idp_entries.results | map(attribute='stdout') | join('\n') }}\n"
+    dest: /tmp/htpasswd
+    mode: "0600"
+  no_log: true
+
+- name: Delete existing htpass-secret if present
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ htpasswd_idp_kubeconfig_path }}
+      delete secret htpass-secret
+      -n openshift-config --ignore-not-found
+  register: htpasswd_idp_secret_delete
+  changed_when: "'deleted' in htpasswd_idp_secret_delete.stdout"
+
+- name: Create htpass-secret from htpasswd file
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ htpasswd_idp_kubeconfig_path }}
+      create secret generic htpass-secret
+      --from-file=htpasswd=/tmp/htpasswd
+      -n openshift-config
+  changed_when: true
+
+- name: Remove temporary htpasswd file
+  ansible.builtin.file:
+    path: /tmp/htpasswd
+    state: absent
+
+- name: Apply OAuth identity provider
+  ansible.builtin.command:
+    cmd: "oc --kubeconfig {{ htpasswd_idp_kubeconfig_path }} apply -f -"
+    stdin: "{{ lookup('template', 'oauth.yml.j2') }}"
+  register: htpasswd_idp_oauth_apply
+  changed_when: "'created' in htpasswd_idp_oauth_apply.stdout or 'configured' in htpasswd_idp_oauth_apply.stdout"
+
+- name: Create ClusterRoleBindings for users with cluster_role
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ htpasswd_idp_kubeconfig_path }}
+      adm policy add-cluster-role-to-user {{ item.cluster_role }} {{ item.name }}
+  loop: "{{ htpasswd_idp_users | selectattr('cluster_role', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.cluster_role }}"
+  register: htpasswd_idp_crb
+  changed_when: "'added' in htpasswd_idp_crb.stdout | default('')"
+  failed_when:
+    - htpasswd_idp_crb.rc != 0
+    - "'already has' not in htpasswd_idp_crb.stderr | default('')"
+
+- name: Wait for authentication operator to finish rollout
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ htpasswd_idp_kubeconfig_path }}
+      get co authentication -o json
+  register: htpasswd_idp_auth_co
+  until: >-
+    htpasswd_idp_auth_co.rc == 0 and
+    (htpasswd_idp_auth_co.stdout | from_json).status.conditions |
+      selectattr('type', 'eq', 'Available') |
+      selectattr('status', 'eq', 'True') | list | length > 0
+    and
+    (htpasswd_idp_auth_co.stdout | from_json).status.conditions |
+      selectattr('type', 'eq', 'Progressing') |
+      selectattr('status', 'eq', 'False') | list | length > 0
+    and
+    (htpasswd_idp_auth_co.stdout | from_json).status.conditions |
+      selectattr('type', 'eq', 'Degraded') |
+      selectattr('status', 'eq', 'False') | list | length > 0
+  retries: 60
+  delay: 10
+  changed_when: false
+
+- name: Test login with admin user
+  ansible.builtin.command:
+    cmd: >-
+      oc login https://api.{{ domain }}:6443
+      -u admin -p {{ htpasswd_admin_password }}
+      --insecure-skip-tls-verify=true
+      --kubeconfig /tmp/htpasswd-login-test
+  register: htpasswd_idp_login_test
+  until: htpasswd_idp_login_test.rc == 0
+  retries: 12
+  delay: 10
+  changed_when: false
+  no_log: true
+
+- name: Verify admin user has cluster-admin privileges
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig /tmp/htpasswd-login-test
+      auth can-i '*' '*' --all-namespaces
+  register: htpasswd_idp_admin_check
+  changed_when: false
+
+- name: Fail if admin is not cluster-admin
+  ansible.builtin.fail:
+    msg: "Admin user does not have cluster-admin privileges."
+  when: htpasswd_idp_admin_check.stdout != 'yes'
+
+- name: Remove temporary login kubeconfig
+  ansible.builtin.file:
+    path: /tmp/htpasswd-login-test
+    state: absent
+
+- name: Display HTPasswd configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "HTPasswd identity provider configured."
+      - "Users created: {{ htpasswd_idp_users | map(attribute='name') | join(', ') }}"
+      - "ClusterRoleBindings:"
+      - "  admin -> cluster-admin"
+      - "  reader -> cluster-reader"
+      - "  test01, test02, test03 -> no bindings"
