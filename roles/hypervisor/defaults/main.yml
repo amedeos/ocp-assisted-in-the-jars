@@ -9,6 +9,5 @@ hypervisor_base_packages_default:
   - virt-install
   - libguestfs-tools
   - iptables-services
-  - genisoimage
   - python3-libvirt
   - libosinfo
