@@ -27,7 +27,7 @@ Deploy a 3-node compact OpenShift cluster using the **Assisted Installer** on KV
 |---|---|---|---|---|---|---|
 | utility | 2 | 4 GB | 50G | - | host-model | qcow2 |
 | ceph | 4 | 16 GB | 50G | 3x 200G OSD | host-model | qcow2 |
-| control-plane-0/1/2 | 16 | 64 GB | 120G | DVD/cdrom | host-passthrough | ISO |
+| control-plane-0/1/2 | 16 | 32 GB | 120G | DVD/cdrom | host-passthrough | ISO |
 
 Control-plane VMs use `host-passthrough` CPU mode for OpenShift Virtualization support.
 
@@ -40,7 +40,7 @@ Control-plane VMs use `host-passthrough` CPU mode for OpenShift Virtualization s
 - **Discovery ISO**: Generated from [Assisted Installer](https://console.redhat.com/openshift/assisted-installer/clusters) -- the playbook prompts for it at stage 07 (not needed upfront)
 - **Ansible**: >= 2.15 with required collections (`make collections`)
 - **Packages on hypervisor**: `qemu`, `libvirt`, `libguestfs-tools`, `virt-install`
-- **Memory**: Minimum ~210GB (RAM + swap) for all VMs on a single host
+- **Memory**: Minimum ~120GB (RAM + swap) for all VMs on a single host
 - **Disk**: Minimum ~500GB in `/var/lib/libvirt/images`
 
 ## Quick start

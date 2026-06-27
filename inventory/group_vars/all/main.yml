@@ -69,7 +69,7 @@ vm_specs:
         device: vdd
   controlplane:
     cpu: 16
-    memory_mb: 65536
+    memory_mb: 32768
     os_disk_gb: 120
     os_variant: rhel9.6
 
