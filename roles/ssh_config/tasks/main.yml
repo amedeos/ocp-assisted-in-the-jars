@@ -18,10 +18,10 @@
     path: "{{ ansible_facts.env.HOME }}/.ssh/config"
     marker: "# {mark} ocp-assisted-in-the-jars {{ cluster_name }}"
     block: |
-      {% for node in cluster_nodes | selectattr('role', 'in', ['utility', 'ceph']) %}
+      {% for node in cluster_nodes %}
       Host {{ node.name }}
           HostName {{ node.ip }}
-          User root
+          User {{ 'core' if node.role == 'control-plane' else 'root' }}
           IdentityFile {{ ssh_key_private }}
           StrictHostKeyChecking no
           UserKnownHostsFile /dev/null
