@@ -1,4 +1,10 @@
 ---
+- name: Enable iptables service to restore rules on boot (RHEL/CentOS)
+  ansible.builtin.service:
+    name: iptables
+    enabled: true
+  when: ansible_os_family == "RedHat"
+
 - name: Enable IP forwarding
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
