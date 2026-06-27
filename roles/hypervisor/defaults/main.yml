@@ -1,4 +1,14 @@
 ---
 hypervisor_enable_nat: "{{ hypervisor.enable_nat | default(true) }}"
 hypervisor_enable_portfw: "{{ hypervisor.enable_portfw | default(true) }}"
-hypervisor_wan_interface: "{{ hypervisor.wan_interface | default('eth0') }}"
+hypervisor_wan_interface: "{{ hypervisor.wan_interface | default(ansible_default_ipv4.interface) }}"
+hypervisor_base_packages: "{{ hypervisor.base_packages | default(hypervisor_base_packages_default) }}"
+hypervisor_base_packages_default:
+  - libvirt
+  - qemu-kvm
+  - virt-install
+  - libguestfs-tools
+  - iptables-services
+  - genisoimage
+  - python3-libvirt
+  - libosinfo

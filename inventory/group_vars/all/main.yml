@@ -88,7 +88,10 @@ ceph_config:
 hypervisor:
   enable_nat: true
   enable_portfw: true
-  wan_interface: eth0
+  # wan_interface is auto-detected from the host default route
+  # (ansible_default_ipv4.interface). Uncomment to override, e.g. when
+  # the public NIC is not the default-route interface.
+  # wan_interface: eth0
 
 # ---- Node definitions ----
 # Each node specifies which hypervisor creates it.

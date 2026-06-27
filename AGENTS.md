@@ -106,6 +106,28 @@ Two files are needed, both gitignored:
 
 `.example` templates for both files are provided in `inventory/`.
 
+### Hypervisor preparation
+
+The `hypervisor` role (playbook `02-prepare-hypervisor.yml`) is a
+one-time prerequisite run explicitly by the user against the
+`hypervisors` group. It is **not** part of `make deploy` (which never
+touches the hypervisor). It configures nested virtualization,
+iptables NAT/port-forwarding, and installs the base virtualization
+packages (`hypervisor_base_packages`, overridable per host via
+`hypervisor.base_packages`).
+
+OS handling is keyed off Ansible facts:
+
+- **RHEL** (`ansible_distribution == "RedHat"`) -- registers the
+  system with `subscription-manager` first, reusing
+  `rh_activation_key` / `rh_org_id` from the vault, then installs
+  packages via `dnf`.
+- **CentOS Stream** (`ansible_distribution == "CentOS"`) -- the
+  subscription step is **skipped** (no entitlement required);
+  packages are installed via `dnf`.
+- **Gentoo** (the default reference hypervisor) -- both steps are
+  skipped; package management is left to the user.
+
 ### Secrets
 
 `inventory/group_vars/all/vault.yml` is **gitignored** and never
