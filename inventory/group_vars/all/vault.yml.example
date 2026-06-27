@@ -11,6 +11,12 @@
 #   https://console.redhat.com/insights/connector/activation-keys
 
 secure_password: "CHANGE_ME"
+
+# Red Hat subscription credentials.
+# Used by base_config (utility/ceph VMs) and by the hypervisor role
+# when a hypervisor runs RHEL. On CentOS Stream the subscription step
+# is skipped automatically (no entitlement needed), so these may stay
+# unset if all your hosts are CentOS/Gentoo.
 rh_activation_key: "CHANGE_ME"
 rh_org_id: "CHANGE_ME"
 

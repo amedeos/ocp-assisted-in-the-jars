@@ -1,0 +1,21 @@
+---
+- name: Register RHEL subscription
+  community.general.redhat_subscription:
+    activationkey: "{{ rh_activation_key }}"
+    org_id: "{{ rh_org_id }}"
+    state: present
+  no_log: true
+  when: ansible_distribution == "RedHat"
+
+- name: Install base hypervisor packages
+  ansible.builtin.dnf:
+    name: "{{ hypervisor_base_packages }}"
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Enable and start libvirtd
+  ansible.builtin.service:
+    name: libvirtd
+    state: started
+    enabled: true
+  when: ansible_os_family == "RedHat"

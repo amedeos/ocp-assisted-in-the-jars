@@ -1,4 +1,7 @@
 ---
+- name: Install base packages
+  ansible.builtin.include_tasks: packages.yml
+
 - name: Configure nested virtualization
   ansible.builtin.include_tasks: nested_virt.yml
 
