@@ -1,3 +1,4 @@
 ---
 network_enable_portfw: "{{ hypervisor.enable_portfw | default(true) }}"
-network_wan_interface: "{{ hypervisor.wan_interface | default('eth0') }}"
+network_wan_interface: "{{ hypervisor.wan_interface | default(ansible_default_ipv4.interface) }}"
+network_iptables_save_path: "{{ '/etc/sysconfig/iptables' if ansible_os_family == 'RedHat' else '/etc/iptables/rules-save' }}"
