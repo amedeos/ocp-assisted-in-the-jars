@@ -8,7 +8,7 @@ hypervisor_base_packages_default:
   - libvirt
   - qemu-kvm
   - virt-install
-  - libguestfs-tools
+  - guestfs-tools
   - iptables-services
   - python3-libvirt
   - libosinfo
