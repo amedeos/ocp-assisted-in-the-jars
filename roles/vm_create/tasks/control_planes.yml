@@ -32,7 +32,7 @@
       --boot hd,cdrom
       --import
       --network {{ _network_spec }},mac={{ item.item.mac }},model=virtio
-      --graphics spice
+      --graphics vnc
       --cpu host-passthrough
       --noautoconsole
   vars:

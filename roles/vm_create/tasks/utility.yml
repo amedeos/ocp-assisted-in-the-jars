@@ -29,7 +29,7 @@
       --disk path={{ hostvars[item.item.hypervisor].image_dir | default(image_dir) }}/{{ item.item.name }}.qcow2
       --import
       --network {{ _network_spec }},mac={{ item.item.mac }},model=virtio
-      --graphics spice
+      --graphics vnc
       --cpu host-model
       --noautoconsole
   vars:
