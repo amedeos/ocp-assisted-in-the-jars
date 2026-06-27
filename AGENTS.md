@@ -108,12 +108,14 @@ Two files are needed, both gitignored:
 
 ### Hypervisor preparation
 
-The `hypervisor` role (playbook `02-prepare-hypervisor.yml`) is a
-one-time prerequisite run explicitly by the user against the
-`hypervisors` group. It is **not** part of `make deploy` (which never
-touches the hypervisor). It configures nested virtualization,
-iptables NAT/port-forwarding, and installs the base virtualization
-packages (`hypervisor_base_packages`, overridable per host via
+The `hypervisor` role (playbook `02-prepare-hypervisor.yml`, run via
+`make prepare-hypervisor`) is a one-time prerequisite run explicitly
+by the user against the `hypervisors` group. It is **not** part of
+`make deploy` (which never touches the hypervisor) -- the
+`prepare-hypervisor` target is standalone and is never a dependency of
+`deploy`. It configures nested virtualization, iptables
+NAT/port-forwarding, and installs the base virtualization packages
+(`hypervisor_base_packages`, overridable per host via
 `hypervisor.base_packages`).
 
 OS handling is keyed off Ansible facts:
