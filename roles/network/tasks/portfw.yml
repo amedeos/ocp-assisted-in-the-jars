@@ -30,3 +30,19 @@
     to_destination: "{{ vip.api }}:6443"
     state: present
   notify: Save iptables
+
+# libvirt's NAT network firewall rejects new inbound connections to the guest
+# network, which silently breaks the DNAT above. Re-allow the forwarded ports
+# via a libvirt network hook so it survives network restarts and reboots.
+- name: Install libvirt network hook to allow forwarded ports (NAT mode)
+  ansible.builtin.template:
+    src: libvirt-network-hook.sh.j2
+    dest: /etc/libvirt/hooks/network
+    mode: "0755"
+  when: network_mode == 'nat'
+
+- name: Apply the libvirt forward-allow rules now (NAT mode)
+  ansible.builtin.command: "/etc/libvirt/hooks/network {{ libvirt_network.name }} started begin -"
+  register: network_portfw_allow
+  changed_when: "'ADDED' in network_portfw_allow.stdout"
+  when: network_mode == 'nat'

@@ -1,0 +1,28 @@
+#!/bin/bash
+# Managed by Ansible (ocp-assisted-in-the-jars). Do not edit by hand.
+#
+# libvirt's NAT network firewall (table ip libvirt_network, chain guest_input)
+# rejects every NEW inbound connection to the guest network, which breaks the
+# DNAT port-forwarding into the cluster (443 -> Ingress VIP, 6443 -> API VIP).
+# libvirt rebuilds that table every time the network (re)starts, dropping any
+# manual rule, so we re-add the needed accepts on each "started" event.
+#
+# Invoked by libvirtd as: network <net-name> <operation> <sub-op> <extra>
+
+net="$1"
+op="$2"
+
+[ "$net" = "{{ libvirt_network.name }}" ] || exit 0
+[ "$op" = "started" ] || exit 0
+
+bridge="{{ libvirt_network.bridge_name }}"
+
+allow() {  # <daddr> <dport> <comment>
+  nft list chain ip libvirt_network guest_input 2>/dev/null | grep -q "$3" && return 0
+  nft insert rule ip libvirt_network guest_input \
+    oif "$bridge" ip daddr "$1" tcp dport "$2" accept comment "\"$3\"" && echo "ADDED $3"
+}
+
+allow {{ vip.ingress }} 443  ocp-portfw-ingress
+allow {{ vip.api }}     6443 ocp-portfw-api
+exit 0
