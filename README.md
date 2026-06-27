@@ -164,6 +164,7 @@ Only include the roles you want to override; defaults for the rest come from `in
 | `make post-install` | Setup oc client and kubeconfig on utility VM |
 | `make configure-odf` | Install ODF with external Ceph storage |
 | `make configure-htpasswd` | Configure HTPasswd identity provider with users |
+| `make print-hosts` | Print /etc/hosts entries for console and API access |
 | `make cleanup` | Destroy VMs and remove SSH config |
 | `make cleanup-network` | Destroy hypervisor network (libvirt NAT mode only) |
 | `make startup` | Start all VMs (utility → ceph → control-planes, with health checks) |
@@ -190,6 +191,7 @@ Only include the roles you want to override; defaults for the rest come from `in
 11. **08-post-install** -- installs oc client, fetches kubeconfig on utility VM
 12. **09-configure-odf** -- deploys ODF operator with external Ceph storage, enables odf-console plugin
 13. **10-configure-htpasswd** -- configures HTPasswd identity provider (admin, reader, test01-03) with ClusterRoleBindings
+14. **11-print-hosts** -- prints the `/etc/hosts` entries needed to reach the console and API (hypervisor public IP in NAT+port-forwarding mode, VIPs in bridge mode)
 
 ## Secrets
 

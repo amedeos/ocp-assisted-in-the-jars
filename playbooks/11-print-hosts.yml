@@ -1,0 +1,28 @@
+---
+- name: Print /etc/hosts entries for console and API access
+  hosts: localhost
+  gather_facts: true
+  tags: [print-hosts]
+  vars:
+    # In NAT mode with port-forwarding the cluster is reached through the
+    # hypervisor's public IP (DNAT forwards 6443->API VIP, 443->Ingress VIP).
+    # In bridge mode the VIPs are reachable directly on the shared L2.
+    _portfw_enabled: "{{ hypervisor.enable_portfw | default(true) }}"
+    _nat_portfw: "{{ network_mode == 'nat' and (_portfw_enabled | bool) }}"
+    _public_ip: "{{ console_access_ip | default(ansible_default_ipv4.address) }}"
+    _api_ip: "{{ _public_ip if (_nat_portfw | bool) else vip.api }}"
+    _apps_ip: "{{ _public_ip if (_nat_portfw | bool) else vip.ingress }}"
+  tasks:
+    - name: Show /etc/hosts entries required for console and API access
+      ansible.builtin.debug:
+        msg:
+          - "Add these entries to /etc/hosts on the machine where you open the console:"
+          - ""
+          - "{{ _apps_ip }} console-openshift-console.apps.{{ domain }} oauth-openshift.apps.{{ domain }}"
+          - "{{ _api_ip }} api.{{ domain }}"
+          - ""
+          - >-
+            Network mode: {{ network_mode }}{{
+            ' (access via hypervisor public IP, port-forwarding enabled)'
+            if (_nat_portfw | bool)
+            else ' (direct VIP access)' }}
