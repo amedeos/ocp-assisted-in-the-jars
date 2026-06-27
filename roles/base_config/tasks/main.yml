@@ -14,4 +14,10 @@
   ansible.builtin.dnf:
     name: "*"
     state: latest
+
+- name: Check whether a reboot is required
+  ansible.builtin.command: dnf needs-restarting --reboothint
+  register: base_config_needs_restarting
+  changed_when: base_config_needs_restarting.rc == 1
+  failed_when: base_config_needs_restarting.rc not in [0, 1]
   notify: Reboot after update
