@@ -1,0 +1,28 @@
+---
+# Let's Encrypt / DNS-01 (DuckDNS) certificate configuration.
+# The whole role is gated by `enable_letsencrypt` (default false).
+
+# ACME endpoint. Staging issues UNTRUSTED certs but has no rate limits --
+# use it to validate the flow first, then set letsencrypt_staging: false.
+letsencrypt_staging: true
+letsencrypt_acme_directory: >-
+  {{
+    'https://acme-staging-v02.api.letsencrypt.org/directory'
+    if (letsencrypt_staging | bool)
+    else 'https://acme-v02.api.letsencrypt.org/directory'
+  }}
+letsencrypt_acme_version: 2
+letsencrypt_remaining_days: 60
+
+# DuckDNS subdomain that owns the cluster domain. With the default
+# cluster_name/base_domain this is "<cluster_name>" of <cluster_name>.duckdns.org.
+letsencrypt_duckdns_subdomain: "{{ cluster_name }}"
+
+# Where certs/keys are generated on the utility VM, and the kubeconfig used
+# to talk to the cluster (produced by the ocp_client role).
+letsencrypt_certs_dir: /root/certs-letsencrypt
+letsencrypt_kubeconfig: /root/kubeconfig-int
+
+# DuckDNS has no per-record API, so give the TXT a moment to propagate
+# before asking Let's Encrypt to validate the challenge.
+letsencrypt_dns_propagation_seconds: 60

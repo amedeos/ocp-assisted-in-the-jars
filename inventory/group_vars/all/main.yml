@@ -31,6 +31,16 @@ baremetal_net:
 # Upstream DNS forwarder (used by dnsmasq on utility)
 dns_forwarder: 1.1.1.1
 
+# Valid SSL certificates via Let's Encrypt (DNS-01 challenge over DuckDNS).
+# Disabled by default. To enable, valid public DNS is required: set
+# base_domain to "duckdns.org" and cluster_name to your DuckDNS subdomain,
+# install the cluster with that domain, put duckdns_token in vault.yml, and
+# set letsencrypt_email below. Start on staging, then flip letsencrypt_staging
+# to false in extra-vars/group_vars for a publicly trusted certificate.
+enable_letsencrypt: false
+letsencrypt_email: ""
+letsencrypt_staging: true
+
 # VIPs for OpenShift
 vip:
   api: 192.168.203.80

@@ -1,0 +1,9 @@
+---
+- name: Configure valid SSL certificates via Let's Encrypt (DNS-01 / DuckDNS)
+  hosts: utility_vms
+  become: true
+  gather_facts: false
+  tags: [letsencrypt]
+  roles:
+    - role: letsencrypt
+      when: enable_letsencrypt | bool
