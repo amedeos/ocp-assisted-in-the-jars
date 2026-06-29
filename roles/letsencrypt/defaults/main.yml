@@ -1,0 +1,37 @@
+---
+# Let's Encrypt / DNS-01 (DuckDNS) certificate configuration.
+# The whole role is gated by `enable_letsencrypt` (default false).
+
+# ACME endpoint. Staging issues UNTRUSTED certs but has no rate limits --
+# use it to validate the flow first, then set letsencrypt_staging: false.
+letsencrypt_staging: true
+letsencrypt_acme_directory: >-
+  {{
+    'https://acme-staging-v02.api.letsencrypt.org/directory'
+    if (letsencrypt_staging | bool)
+    else 'https://acme-v02.api.letsencrypt.org/directory'
+  }}
+letsencrypt_acme_version: 2
+letsencrypt_remaining_days: 60
+
+# DuckDNS subdomain that owns the cluster domain. With the default
+# cluster_name/base_domain this is "<cluster_name>" of <cluster_name>.duckdns.org.
+letsencrypt_duckdns_subdomain: "{{ cluster_name }}"
+
+# Where certs/keys are generated on the utility VM, and the kubeconfig used
+# to talk to the cluster (produced by the ocp_client role).
+letsencrypt_certs_dir: /root/certs-letsencrypt
+letsencrypt_kubeconfig: /root/kubeconfig-int
+
+# Per-environment cert storage so a valid staging cert does not block the
+# first production issuance (acme_certificate renews on remaining_days, not
+# on issuer). staging and production keep separate cert files.
+letsencrypt_env: "{{ 'staging' if (letsencrypt_staging | bool) else 'production' }}"
+letsencrypt_cert_dir: "{{ letsencrypt_certs_dir }}/{{ domain }}-{{ letsencrypt_env }}"
+
+# Poll a public DNS-over-HTTPS resolver until the challenge TXT is visible
+# before asking Let's Encrypt to validate (DuckDNS propagation can lag,
+# especially at the *.apps wildcard level). retries * delay = max wait.
+letsencrypt_dns_check_resolver: "https://dns.google/resolve"
+letsencrypt_dns_check_retries: 30
+letsencrypt_dns_check_delay: 10

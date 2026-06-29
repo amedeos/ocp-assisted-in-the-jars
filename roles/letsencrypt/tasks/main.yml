@@ -1,0 +1,143 @@
+---
+- name: Validate Let's Encrypt prerequisites
+  ansible.builtin.assert:
+    that:
+      - duckdns_token is defined and (duckdns_token | length > 0)
+      - letsencrypt_email is defined and (letsencrypt_email | length > 0)
+    fail_msg: >-
+      enable_letsencrypt is true but duckdns_token (vault) and/or
+      letsencrypt_email are not set. A publicly resolvable domain
+      (e.g. <cluster_name>.duckdns.org) is also required.
+
+- name: Ensure python3-cryptography is present
+  # Required on the target by the community.crypto OpenSSL/ACME modules.
+  ansible.builtin.dnf:
+    name: python3-cryptography
+    state: present
+
+- name: Ensure certificate directory exists
+  ansible.builtin.file:
+    path: "{{ letsencrypt_cert_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Generate ACME account private key
+  community.crypto.openssl_privatekey:
+    path: "{{ letsencrypt_certs_dir }}/account.key"
+    type: RSA
+    size: 4096
+    mode: "0600"
+
+- name: Generate certificate private key
+  community.crypto.openssl_privatekey:
+    path: "{{ letsencrypt_cert_dir }}/cert.key"
+    type: RSA
+    size: 4096
+    mode: "0600"
+
+- name: Generate CSR for the apps wildcard
+  community.crypto.openssl_csr:
+    path: "{{ letsencrypt_cert_dir }}/cert.csr"
+    privatekey_path: "{{ letsencrypt_cert_dir }}/cert.key"
+    subject_alt_name: "DNS:*.apps.{{ domain }}"
+    mode: "0644"
+
+# The ACME account is per-directory: staging and production need separate
+# registrations of the same key. Ensure it exists here so acme_certificate
+# can run with modify_account: false.
+- name: Ensure ACME account is registered
+  community.crypto.acme_account:
+    account_key_src: "{{ letsencrypt_certs_dir }}/account.key"
+    acme_directory: "{{ letsencrypt_acme_directory }}"
+    acme_version: "{{ letsencrypt_acme_version }}"
+    terms_agreed: true
+    state: present
+    contact:
+      - "mailto:{{ letsencrypt_email }}"
+
+- name: Request ACME DNS-01 challenge
+  community.crypto.acme_certificate:
+    account_key_src: "{{ letsencrypt_certs_dir }}/account.key"
+    account_email: "{{ letsencrypt_email }}"
+    src: "{{ letsencrypt_cert_dir }}/cert.csr"
+    cert: "{{ letsencrypt_cert_dir }}/cert.crt"
+    challenge: dns-01
+    acme_directory: "{{ letsencrypt_acme_directory }}"
+    acme_version: "{{ letsencrypt_acme_version }}"
+    remaining_days: "{{ letsencrypt_remaining_days }}"
+    terms_agreed: true
+    modify_account: false
+  register: letsencrypt_challenge
+
+# challenge_data_dns is populated only when a new/renewed cert is needed.
+# When the existing cert is still valid it is empty and the remaining
+# steps are skipped, making the role idempotent.
+- name: Publish DNS-01 challenge TXT to DuckDNS
+  ansible.builtin.uri:
+    url: >-
+      https://www.duckdns.org/update?domains={{ letsencrypt_duckdns_subdomain }}&token={{ duckdns_token }}&txt={{ item.value | first }}
+    return_content: true
+  loop: "{{ letsencrypt_challenge.challenge_data_dns | default({}) | dict2items }}"
+  register: letsencrypt_duckdns
+  changed_when: true
+  failed_when: "'OK' not in letsencrypt_duckdns.content"
+  no_log: true
+  when: letsencrypt_challenge.challenge_data_dns | default({}) | length > 0
+
+# DuckDNS serves the TXT on its anycast nodes with some lag, and the
+# *.apps wildcard level can trail the apex. Poll a PUBLIC resolver (the
+# utility's dnsmasq is authoritative for this domain and would not see it)
+# until the expected value is visible before asking Let's Encrypt to check.
+- name: Wait for DNS-01 TXT to propagate on public DNS
+  ansible.builtin.uri:
+    url: "{{ letsencrypt_dns_check_resolver }}?name={{ item.key }}&type=TXT"
+    return_content: true
+    headers:
+      accept: application/dns-json
+  loop: "{{ letsencrypt_challenge.challenge_data_dns | default({}) | dict2items }}"
+  register: letsencrypt_dns_check
+  until: (item.value | first) in (letsencrypt_dns_check.content | default(''))
+  retries: "{{ letsencrypt_dns_check_retries }}"
+  delay: "{{ letsencrypt_dns_check_delay }}"
+  when: letsencrypt_challenge.challenge_data_dns | default({}) | length > 0
+
+- name: Validate challenge and retrieve certificate
+  community.crypto.acme_certificate:
+    account_key_src: "{{ letsencrypt_certs_dir }}/account.key"
+    account_email: "{{ letsencrypt_email }}"
+    src: "{{ letsencrypt_cert_dir }}/cert.csr"
+    cert: "{{ letsencrypt_cert_dir }}/cert.crt"
+    fullchain: "{{ letsencrypt_cert_dir }}/fullchain.crt"
+    chain: "{{ letsencrypt_cert_dir }}/intermediate.crt"
+    challenge: dns-01
+    acme_directory: "{{ letsencrypt_acme_directory }}"
+    acme_version: "{{ letsencrypt_acme_version }}"
+    remaining_days: "{{ letsencrypt_remaining_days }}"
+    modify_account: false
+    data: "{{ letsencrypt_challenge }}"
+  when: letsencrypt_challenge.challenge_data_dns | default({}) | length > 0
+
+- name: Create or update the apps TLS secret
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      oc --kubeconfig {{ letsencrypt_kubeconfig }} create secret tls apps-certs
+      --cert={{ letsencrypt_cert_dir }}/fullchain.crt
+      --key={{ letsencrypt_cert_dir }}/cert.key
+      -n openshift-ingress --dry-run=client -o yaml
+      | oc --kubeconfig {{ letsencrypt_kubeconfig }} apply -f -
+    executable: /usr/bin/bash
+  register: letsencrypt_secret
+  changed_when: "'unchanged' not in letsencrypt_secret.stdout"
+
+- name: Patch default IngressController to use the certificate
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ letsencrypt_kubeconfig }}
+      patch ingresscontroller.operator/default --type=merge
+      -p {{ _ingress_patch | quote }}
+      -n openshift-ingress-operator
+  vars:
+    _ingress_patch: '{"spec":{"defaultCertificate":{"name":"apps-certs"}}}'
+  register: letsencrypt_patch
+  changed_when: "'patched' in letsencrypt_patch.stdout and 'no change' not in letsencrypt_patch.stdout"

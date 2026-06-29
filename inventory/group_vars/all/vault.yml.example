@@ -29,6 +29,11 @@ htpasswd_admin_password: "CHANGE_ME"
 # htpasswd_test02_password: "CHANGE_ME"
 # htpasswd_test03_password: "CHANGE_ME"
 
+# DuckDNS token for Let's Encrypt DNS-01 challenges.
+# Only needed when enable_letsencrypt: true. Sign in at https://www.duckdns.org
+# and copy the "token" shown at the top of the page.
+# duckdns_token: "CHANGE_ME"
+
 # Pull secret for container registries (registry.redhat.io).
 # Download from: https://console.redhat.com/openshift/install/pull-secret
 # Save to: files/pull-secret.txt (gitignored, not in vault)

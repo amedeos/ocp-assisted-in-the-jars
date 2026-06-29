@@ -61,6 +61,9 @@ explicitly via `make prepare-network`.
 8. **08** -- post-install (oc client, kubeconfig)
 9. **09** -- configure ODF with external Ceph
 10. **10** -- configure HTPasswd identity provider
+11. **10b** -- configure valid SSL certs via Let's Encrypt
+    (DNS-01 over DuckDNS); skipped unless `enable_letsencrypt`
+12. **11** -- print /etc/hosts entries for console/API access
 
 ### Network modes
 

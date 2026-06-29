@@ -51,6 +51,10 @@
   ansible.builtin.import_playbook: 10-configure-htpasswd.yml
   tags: [configure-htpasswd]
 
+- name: Configure valid SSL certificates (Let's Encrypt / DuckDNS)
+  ansible.builtin.import_playbook: 10b-configure-letsencrypt.yml
+  tags: [letsencrypt]
+
 - name: Print /etc/hosts entries for console and API access
   ansible.builtin.import_playbook: 11-print-hosts.yml
   tags: [print-hosts]
