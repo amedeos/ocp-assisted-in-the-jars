@@ -15,6 +15,11 @@
     name: "*"
     state: latest
 
+- name: Install base packages
+  ansible.builtin.dnf:
+    name: "{{ base_config_packages }}"
+    state: present
+
 - name: Check whether a reboot is required
   ansible.builtin.command: dnf needs-restarting --reboothint
   register: base_config_needs_restarting

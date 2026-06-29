@@ -28,6 +28,17 @@
         path: /tmp/openshift-client-linux.tar.gz
         state: absent
 
+- name: Generate oc bash completion script
+  ansible.builtin.command: oc completion bash
+  register: ocp_client_completion
+  changed_when: false
+
+- name: Install oc bash completion
+  ansible.builtin.copy:
+    content: "{{ ocp_client_completion.stdout }}"
+    dest: /etc/bash_completion.d/oc
+    mode: "0644"
+
 - name: Copy SSH key for control-plane access
   ansible.builtin.copy:
     src: "{{ ssh_key_private }}"

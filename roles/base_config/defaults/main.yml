@@ -1,0 +1,5 @@
+---
+# Packages installed on every VM (utility, ceph) by the base_config role.
+# Override per-deployment via group_vars or extra-vars if needed.
+base_config_packages:
+  - bash-completion
