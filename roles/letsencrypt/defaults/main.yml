@@ -23,6 +23,12 @@ letsencrypt_duckdns_subdomain: "{{ cluster_name }}"
 letsencrypt_certs_dir: /root/certs-letsencrypt
 letsencrypt_kubeconfig: /root/kubeconfig-int
 
+# Per-environment cert storage so a valid staging cert does not block the
+# first production issuance (acme_certificate renews on remaining_days, not
+# on issuer). staging and production keep separate cert files.
+letsencrypt_env: "{{ 'staging' if (letsencrypt_staging | bool) else 'production' }}"
+letsencrypt_cert_dir: "{{ letsencrypt_certs_dir }}/{{ domain }}-{{ letsencrypt_env }}"
+
 # Poll a public DNS-over-HTTPS resolver until the challenge TXT is visible
 # before asking Let's Encrypt to validate (DuckDNS propagation can lag,
 # especially at the *.apps wildcard level). retries * delay = max wait.

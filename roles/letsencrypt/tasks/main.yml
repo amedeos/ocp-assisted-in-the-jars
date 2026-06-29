@@ -17,7 +17,7 @@
 
 - name: Ensure certificate directory exists
   ansible.builtin.file:
-    path: "{{ letsencrypt_certs_dir }}/{{ domain }}"
+    path: "{{ letsencrypt_cert_dir }}"
     state: directory
     mode: "0700"
 
@@ -30,15 +30,15 @@
 
 - name: Generate certificate private key
   community.crypto.openssl_privatekey:
-    path: "{{ letsencrypt_certs_dir }}/{{ domain }}/cert.key"
+    path: "{{ letsencrypt_cert_dir }}/cert.key"
     type: RSA
     size: 4096
     mode: "0600"
 
 - name: Generate CSR for the apps wildcard
   community.crypto.openssl_csr:
-    path: "{{ letsencrypt_certs_dir }}/{{ domain }}/cert.csr"
-    privatekey_path: "{{ letsencrypt_certs_dir }}/{{ domain }}/cert.key"
+    path: "{{ letsencrypt_cert_dir }}/cert.csr"
+    privatekey_path: "{{ letsencrypt_cert_dir }}/cert.key"
     subject_alt_name: "DNS:*.apps.{{ domain }}"
     mode: "0644"
 
@@ -46,8 +46,8 @@
   community.crypto.acme_certificate:
     account_key_src: "{{ letsencrypt_certs_dir }}/account.key"
     account_email: "{{ letsencrypt_email }}"
-    src: "{{ letsencrypt_certs_dir }}/{{ domain }}/cert.csr"
-    cert: "{{ letsencrypt_certs_dir }}/{{ domain }}/cert.crt"
+    src: "{{ letsencrypt_cert_dir }}/cert.csr"
+    cert: "{{ letsencrypt_cert_dir }}/cert.crt"
     challenge: dns-01
     acme_directory: "{{ letsencrypt_acme_directory }}"
     acme_version: "{{ letsencrypt_acme_version }}"
@@ -92,10 +92,10 @@
   community.crypto.acme_certificate:
     account_key_src: "{{ letsencrypt_certs_dir }}/account.key"
     account_email: "{{ letsencrypt_email }}"
-    src: "{{ letsencrypt_certs_dir }}/{{ domain }}/cert.csr"
-    cert: "{{ letsencrypt_certs_dir }}/{{ domain }}/cert.crt"
-    fullchain: "{{ letsencrypt_certs_dir }}/{{ domain }}/fullchain.crt"
-    chain: "{{ letsencrypt_certs_dir }}/{{ domain }}/intermediate.crt"
+    src: "{{ letsencrypt_cert_dir }}/cert.csr"
+    cert: "{{ letsencrypt_cert_dir }}/cert.crt"
+    fullchain: "{{ letsencrypt_cert_dir }}/fullchain.crt"
+    chain: "{{ letsencrypt_cert_dir }}/intermediate.crt"
     challenge: dns-01
     acme_directory: "{{ letsencrypt_acme_directory }}"
     acme_version: "{{ letsencrypt_acme_version }}"
@@ -109,8 +109,8 @@
     cmd: >-
       set -o pipefail;
       oc --kubeconfig {{ letsencrypt_kubeconfig }} create secret tls apps-certs
-      --cert={{ letsencrypt_certs_dir }}/{{ domain }}/fullchain.crt
-      --key={{ letsencrypt_certs_dir }}/{{ domain }}/cert.key
+      --cert={{ letsencrypt_cert_dir }}/fullchain.crt
+      --key={{ letsencrypt_cert_dir }}/cert.key
       -n openshift-ingress --dry-run=client -o yaml
       | oc --kubeconfig {{ letsencrypt_kubeconfig }} apply -f -
     executable: /usr/bin/bash
