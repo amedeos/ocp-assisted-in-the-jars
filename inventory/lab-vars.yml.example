@@ -10,6 +10,21 @@
 #
 # lab-vars.yml is in .gitignore and will NOT be committed.
 
+# Cluster identity -- overrides the defaults in group_vars/all/main.yml
+# (cluster_name: ocp-lab, base_domain: example.com). The full cluster domain
+# becomes <cluster_name>.<base_domain> and must match the cluster you create
+# on console.redhat.com.
+# cluster_name: ocp-lab
+# base_domain: example.com
+
+# Valid SSL certificates via Let's Encrypt (DNS-01 over DuckDNS).
+# Needs a publicly resolvable domain, e.g. base_domain: duckdns.org with
+# cluster_name as your DuckDNS subdomain. Put duckdns_token in vault.yml.
+# Start on staging, then set letsencrypt_staging: false for a trusted cert.
+# enable_letsencrypt: true
+# letsencrypt_email: "you@example.com"
+# letsencrypt_staging: true
+
 # VM placement -- the 'hypervisor' field must match a host under 'hypervisors'
 # in your custom inventory file.
 cluster_nodes:
