@@ -1,5 +1,11 @@
 # ocp-assisted-in-the-jars
 
+[![Lint](https://github.com/amedeos/ocp-assisted-in-the-jars/actions/workflows/lint.yml/badge.svg)](https://github.com/amedeos/ocp-assisted-in-the-jars/actions/workflows/lint.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Built with Ansible](https://img.shields.io/badge/Built%20with-Ansible-1A1918?logo=ansible&logoColor=white)](https://www.ansible.com/)
+[![ansible-lint](https://img.shields.io/badge/ansible--lint-production-success.svg)](.ansible-lint)
+[![OpenShift](https://img.shields.io/badge/OpenShift-compact%203--node-EE0000?logo=redhatopenshift&logoColor=white)](https://console.redhat.com/openshift/assisted-installer/clusters)
+
 Deploy a 3-node compact OpenShift cluster using the **Assisted Installer** on KVM/libvirt VMs with nested virtualization.
 
 ## Architecture
@@ -33,17 +39,33 @@ Control-plane VMs use `host-passthrough` CPU mode for OpenShift Virtualization s
 
 ## Prerequisites
 
-- **Hypervisor**: Gentoo Linux (or any Linux with KVM) with nested virtualization enabled
-- **Network**: Run `make prepare-network` before first deploy (creates libvirt NAT network by default, or set `network_mode: bridge` for a manual bridge)
-- **RHEL image**: `rhel-10.2-x86_64-kvm.qcow2` downloaded from access.redhat.com
+> **`make deploy` never touches the hypervisor.** Hypervisor and network
+> preparation are one-time prerequisites that **you** run explicitly and
+> consciously (`make prepare-hypervisor`, `make prepare-network`). The deploy
+> pipeline only validates (preflight) and creates/configures VMs -- it will
+> never enable nested virtualization, change iptables, or create the network
+> on its own.
+
+- **Hypervisor**: Gentoo Linux (or any Linux with KVM) with nested
+  virtualization enabled. On RHEL/CentOS Stream you can automate this with
+  `make prepare-hypervisor`, which configures nested virt, iptables
+  NAT/port-forwarding, and installs the base virtualization packages. On Gentoo
+  (the reference hypervisor) package management is left to you -- install the
+  packages below manually.
+- **Network**: Run `make prepare-network` before the first deploy. It creates
+  the libvirt NAT network (default) and the DNAT port-forwarding rules, or set
+  `network_mode: bridge` to use a pre-existing manual bridge instead.
+- **RHEL image**: `rhel-10.2-x86_64-kvm.qcow2` downloaded from access.redhat.com, placed at `/root/images/` on each hypervisor (path set by `image_location`)
 - **Pull secret**: Downloaded from [console.redhat.com](https://console.redhat.com/openshift/install/pull-secret) and saved to `files/pull-secret.txt` (used by cephadm to pull container images from `registry.redhat.io`)
-- **Discovery ISO**: Generated from [Assisted Installer](https://console.redhat.com/openshift/assisted-installer/clusters) -- the playbook prompts for it at stage 07 (not needed upfront)
+- **Discovery ISO**: Generated from [Assisted Installer](https://console.redhat.com/openshift/assisted-installer/clusters) -- the playbook prompts for it at stage 07 (not needed upfront). It is placed at `{{ image_dir }}/discovery-image.iso` (default `/var/lib/libvirt/images/discovery-image.iso`)
 - **Ansible**: >= 2.15 with required collections (`make collections`)
-- **Packages on hypervisor**: `qemu`, `libvirt`, `guestfs-tools` (provides `virt-resize`/`virt-customize`), `virt-install`
+- **Packages on hypervisor**: `qemu`, `libvirt`, `guestfs-tools` (provides `virt-resize`/`virt-customize`), `virt-install` (installed automatically by `make prepare-hypervisor` on RHEL/CentOS)
 - **Memory**: Minimum ~120GB (RAM + swap) for all VMs on a single host
 - **Disk**: Minimum ~500GB in `/var/lib/libvirt/images`
 
 ## Quick start
+
+### Common setup (both single-host and multi-hypervisor)
 
 ```bash
 # 1. Install Ansible collections
@@ -66,10 +88,26 @@ make pull-secret-encrypt
 #    /root/images/rhel-10.2-x86_64-kvm.qcow2
 #    (Discovery ISO is downloaded later, before stage 07)
 
-# 6. Prepare network (one-time, creates libvirt NAT network by default)
-make prepare-network
+# 6. One-time hypervisor + network prep (run consciously -- never done by deploy)
+make prepare-hypervisor   # RHEL/CentOS only; on Gentoo prepare the host manually
+make prepare-network      # creates libvirt NAT network + port-forwarding
+```
 
-# 7. Create custom inventory and vars (multi-hypervisor)
+### Single host (default -- all VMs on localhost)
+
+No custom inventory or vars are needed: the defaults in
+`inventory/group_vars/all/main.yml` place every VM on `localhost`.
+
+```bash
+# 7. Run pre-flight checks, then deploy
+make preflight
+make deploy
+```
+
+### Multi-hypervisor (VMs distributed across hosts)
+
+```bash
+# 7. Create custom inventory and vars
 cp inventory/hosts-multi.yml.example inventory/hosts-mylab.yml
 cp inventory/lab-vars.yml.example inventory/lab-vars.yml
 # Edit both files with your lab values
@@ -150,7 +188,10 @@ Only include the roles you want to override; defaults for the rest come from `in
 
 | Target | Description |
 |---|---|
-| `make prepare-network` | Create network on hypervisor (run once before first deploy) |
+| `make help` | List all targets with their descriptions |
+| `make collections` | Install required Ansible Galaxy collections |
+| `make prepare-hypervisor` | Configure nested virt, iptables, base packages (one-time, RHEL/CentOS; **never run by deploy**) |
+| `make prepare-network` | Create network on hypervisor (one-time, run before first deploy; **never run by deploy**) |
 | `make deploy` | Full deployment (never modifies hypervisor) |
 | `make preflight` | Read-only pre-flight checks |
 | `make ssh-key` | Generate SSH key pair |
@@ -165,13 +206,15 @@ Only include the roles you want to override; defaults for the rest come from `in
 | `make configure-odf` | Install ODF with external Ceph storage |
 | `make configure-htpasswd` | Configure HTPasswd identity provider with users |
 | `make print-hosts` | Print /etc/hosts entries for console and API access |
-| `make cleanup` | Destroy VMs and remove SSH config |
+| `make cleanup` | Destroy and undefine all VMs (incl. storage and OSD disks), remove golden images + discovery ISO (`cleanup_remove_images: true`), and clean up the generated SSH key pair and `~/.ssh/config` entries |
 | `make cleanup-network` | Destroy hypervisor network (libvirt NAT mode only) |
 | `make startup` | Start all VMs (utility → ceph → control-planes, with health checks) |
 | `make shutdown` | Graceful shutdown (oc debug shutdown → wait → ceph → utility) |
 | `make lint` | Lint and syntax check |
 | `make check` | Dry run |
 | `make vault-edit` | Edit encrypted vault |
+| `make vault-encrypt` | Encrypt the vault file |
+| `make vault-decrypt` | Decrypt the vault file (for manual editing) |
 | `make pull-secret-encrypt` | Encrypt pull secret |
 | `make pull-secret-decrypt` | Decrypt pull secret |
 
@@ -210,3 +253,8 @@ Variables in vault.yml:
 - `htpasswd_admin_password` -- password for HTPasswd users (generate with `openssl rand -hex 30`)
 
 Never commit vault files or SSH keys.
+
+## License
+
+This project is licensed under the **GNU General Public License v3.0**.
+See the [LICENSE](LICENSE) file for the full text.
