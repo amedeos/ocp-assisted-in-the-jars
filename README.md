@@ -184,6 +184,52 @@ vm_specs:
 
 Only include the roles you want to override; defaults for the rest come from `inventory/group_vars/all/main.yml`.
 
+## Valid SSL certificates (optional)
+
+By default the cluster serves self-signed certificates. The optional
+`letsencrypt` stage obtains a publicly trusted wildcard certificate for
+`*.apps.<domain>` from Let's Encrypt using a DNS-01 challenge over
+[DuckDNS](https://www.duckdns.org), and applies it to the default
+IngressController.
+
+**Requirements:**
+
+- A publicly resolvable domain. DuckDNS provides one for free: set
+  `base_domain: duckdns.org` and `cluster_name` to your DuckDNS subdomain
+  (e.g. `ocp-lab` → `ocp-lab.duckdns.org`). The cluster **must be created on
+  console.redhat.com with this same base domain** -- it is fixed at install
+  time and cannot be changed by the certificate afterwards.
+- `duckdns_token` in `vault.yml`, and `letsencrypt_email` set.
+
+**Enable** it in your gitignored vars file (e.g. `inventory/lab-vars.yml`):
+
+```yaml
+base_domain: duckdns.org
+enable_letsencrypt: true
+letsencrypt_email: "you@example.com"
+letsencrypt_staging: true   # validate the flow first; see below
+```
+
+Then run the stage (it only touches the utility VM, which already has `oc`
+and a kubeconfig):
+
+```bash
+# 1. first run on the ACME staging endpoint (untrusted cert, no rate limits)
+make configure-letsencrypt INVENTORY=inventory/hosts-mylab.yml CUSTOM_VARS=inventory/lab-vars.yml
+
+# 2. set letsencrypt_staging: false, then re-run for a publicly trusted cert
+make configure-letsencrypt INVENTORY=inventory/hosts-mylab.yml CUSTOM_VARS=inventory/lab-vars.yml
+```
+
+Staging and production certificates are stored in separate directories, so
+switching to production issues a fresh trusted certificate rather than
+re-applying the staging one.
+
+**Renewal** is idempotent: re-running the target renews only when fewer than
+`letsencrypt_remaining_days` (default 60) remain on the 90-day certificate --
+otherwise it is a no-op. Renewal is manual, so schedule the target (e.g. a
+weekly cron) if you want it hands-off.
+
 ## Makefile targets
 
 | Target | Description |
@@ -205,6 +251,7 @@ Only include the roles you want to override; defaults for the rest come from `in
 | `make post-install` | Setup oc client and kubeconfig on utility VM |
 | `make configure-odf` | Install ODF with external Ceph storage |
 | `make configure-htpasswd` | Configure HTPasswd identity provider with users |
+| `make configure-letsencrypt` | Configure valid SSL certs via Let's Encrypt (optional; needs `enable_letsencrypt`) |
 | `make print-hosts` | Print /etc/hosts entries for console and API access |
 | `make cleanup` | Destroy and undefine all VMs (incl. storage and OSD disks), remove golden images + discovery ISO (`cleanup_remove_images: true`), and clean up the generated SSH key pair and `~/.ssh/config` entries |
 | `make cleanup-network` | Destroy hypervisor network (libvirt NAT mode only) |
@@ -234,7 +281,8 @@ Only include the roles you want to override; defaults for the rest come from `in
 11. **08-post-install** -- installs oc client, fetches kubeconfig on utility VM
 12. **09-configure-odf** -- deploys ODF operator with external Ceph storage, enables odf-console plugin
 13. **10-configure-htpasswd** -- configures HTPasswd identity provider (admin, reader, test01-03) with ClusterRoleBindings
-14. **11-print-hosts** -- prints the `/etc/hosts` entries needed to reach the console and API (hypervisor public IP in NAT+port-forwarding mode, VIPs in bridge mode)
+14. **10b-configure-letsencrypt** -- *optional* (skipped unless `enable_letsencrypt`): obtains a valid wildcard cert for `*.apps.<domain>` via Let's Encrypt DNS-01 over DuckDNS and applies it to the default IngressController
+15. **11-print-hosts** -- prints the `/etc/hosts` entries needed to reach the console and API (hypervisor public IP in NAT+port-forwarding mode, VIPs in bridge mode)
 
 ## Secrets
 
@@ -251,6 +299,7 @@ Variables in vault.yml:
 - `rh_activation_key` -- Red Hat activation key ([registration](https://console.redhat.com/insights/registration), [manage keys](https://console.redhat.com/insights/connector/activation-keys))
 - `rh_org_id` -- Red Hat organization ID
 - `htpasswd_admin_password` -- password for HTPasswd users (generate with `openssl rand -hex 30`)
+- `duckdns_token` -- *optional*, only for the Let's Encrypt stage ([duckdns.org](https://www.duckdns.org) token)
 
 Never commit vault files or SSH keys.
 
