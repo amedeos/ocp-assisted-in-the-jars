@@ -23,6 +23,9 @@ letsencrypt_duckdns_subdomain: "{{ cluster_name }}"
 letsencrypt_certs_dir: /root/certs-letsencrypt
 letsencrypt_kubeconfig: /root/kubeconfig-int
 
-# DuckDNS has no per-record API, so give the TXT a moment to propagate
-# before asking Let's Encrypt to validate the challenge.
-letsencrypt_dns_propagation_seconds: 60
+# Poll a public DNS-over-HTTPS resolver until the challenge TXT is visible
+# before asking Let's Encrypt to validate (DuckDNS propagation can lag,
+# especially at the *.apps wildcard level). retries * delay = max wait.
+letsencrypt_dns_check_resolver: "https://dns.google/resolve"
+letsencrypt_dns_check_retries: 30
+letsencrypt_dns_check_delay: 10

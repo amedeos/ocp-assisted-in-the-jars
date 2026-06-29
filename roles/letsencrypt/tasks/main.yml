@@ -53,6 +53,7 @@
     acme_version: "{{ letsencrypt_acme_version }}"
     remaining_days: "{{ letsencrypt_remaining_days }}"
     terms_agreed: true
+    modify_account: false
   register: letsencrypt_challenge
 
 # challenge_data_dns is populated only when a new/renewed cert is needed.
@@ -70,9 +71,21 @@
   no_log: true
   when: letsencrypt_challenge.challenge_data_dns | default({}) | length > 0
 
-- name: Wait for DNS propagation
-  ansible.builtin.pause:
-    seconds: "{{ letsencrypt_dns_propagation_seconds | int }}"
+# DuckDNS serves the TXT on its anycast nodes with some lag, and the
+# *.apps wildcard level can trail the apex. Poll a PUBLIC resolver (the
+# utility's dnsmasq is authoritative for this domain and would not see it)
+# until the expected value is visible before asking Let's Encrypt to check.
+- name: Wait for DNS-01 TXT to propagate on public DNS
+  ansible.builtin.uri:
+    url: "{{ letsencrypt_dns_check_resolver }}?name={{ item.key }}&type=TXT"
+    return_content: true
+    headers:
+      accept: application/dns-json
+  loop: "{{ letsencrypt_challenge.challenge_data_dns | default({}) | dict2items }}"
+  register: letsencrypt_dns_check
+  until: (item.value | first) in (letsencrypt_dns_check.content | default(''))
+  retries: "{{ letsencrypt_dns_check_retries }}"
+  delay: "{{ letsencrypt_dns_check_delay }}"
   when: letsencrypt_challenge.challenge_data_dns | default({}) | length > 0
 
 - name: Validate challenge and retrieve certificate
@@ -87,6 +100,7 @@
     acme_directory: "{{ letsencrypt_acme_directory }}"
     acme_version: "{{ letsencrypt_acme_version }}"
     remaining_days: "{{ letsencrypt_remaining_days }}"
+    modify_account: false
     data: "{{ letsencrypt_challenge }}"
   when: letsencrypt_challenge.challenge_data_dns | default({}) | length > 0
 
