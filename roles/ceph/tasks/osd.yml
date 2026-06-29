@@ -10,10 +10,16 @@
   changed_when: false
 
 - name: Add OSD disks
+  # cephadm invalidates its device inventory after each OSD is created, so
+  # back-to-back adds race against the refresh and silently no-op (rc 0, no
+  # "Created osd"). Retry each device until it is actually consumed.
   ansible.builtin.command:
     cmd: "ceph orch daemon add osd {{ ceph_osd_hostname.stdout }}:{{ item }}"
   loop: "{{ ceph_osd_devices }}"
   register: ceph_osd_add
+  until: "'Created osd' in ceph_osd_add.stdout or 'already' in ceph_osd_add.stderr"
+  retries: 12
+  delay: 10
   changed_when: "'Created osd' in ceph_osd_add.stdout"
   failed_when: ceph_osd_add.rc != 0 and 'already' not in ceph_osd_add.stderr
   when: (ceph_osd_tree.stdout | from_json).nodes | selectattr('type', 'eq', 'osd') | list | length < ceph_osd_devices | length
