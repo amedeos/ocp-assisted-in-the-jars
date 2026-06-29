@@ -9,7 +9,7 @@
     # In bridge mode the VIPs are reachable directly on the shared L2.
     _portfw_enabled: "{{ hypervisor.enable_portfw | default(true) }}"
     _nat_portfw: "{{ network_mode == 'nat' and (_portfw_enabled | bool) }}"
-    _public_ip: "{{ console_access_ip | default(ansible_default_ipv4.address) }}"
+    _public_ip: "{{ console_access_ip | default(ansible_facts['default_ipv4']['address']) }}"
     _api_ip: "{{ _public_ip if (_nat_portfw | bool) else vip.api }}"
     _apps_ip: "{{ _public_ip if (_nat_portfw | bool) else vip.ingress }}"
   tasks:
