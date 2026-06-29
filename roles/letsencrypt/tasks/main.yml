@@ -42,6 +42,19 @@
     subject_alt_name: "DNS:*.apps.{{ domain }}"
     mode: "0644"
 
+# The ACME account is per-directory: staging and production need separate
+# registrations of the same key. Ensure it exists here so acme_certificate
+# can run with modify_account: false.
+- name: Ensure ACME account is registered
+  community.crypto.acme_account:
+    account_key_src: "{{ letsencrypt_certs_dir }}/account.key"
+    acme_directory: "{{ letsencrypt_acme_directory }}"
+    acme_version: "{{ letsencrypt_acme_version }}"
+    terms_agreed: true
+    state: present
+    contact:
+      - "mailto:{{ letsencrypt_email }}"
+
 - name: Request ACME DNS-01 challenge
   community.crypto.acme_certificate:
     account_key_src: "{{ letsencrypt_certs_dir }}/account.key"
