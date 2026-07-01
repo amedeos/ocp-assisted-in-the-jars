@@ -29,14 +29,39 @@
       when: shutdown_all_off | bool
       run_once: true
 
-- name: Gracefully shut down OpenShift nodes
+- name: Pre-shutdown Ceph health check
+  hosts: ceph_vms
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check Ceph health is HEALTH_OK
+      ansible.builtin.command:
+        cmd: ceph health
+      register: shutdown_ceph_health
+      changed_when: false
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
+
+    - name: Display Ceph health status
+      ansible.builtin.debug:
+        msg: "Ceph health: {{ shutdown_ceph_health.stdout | trim }}"
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
+
+    - name: Fail if Ceph is not HEALTH_OK
+      ansible.builtin.fail:
+        msg: >-
+          Ceph is not healthy. Current status: {{ shutdown_ceph_health.stdout | trim }}.
+          Resolve Ceph health issues before shutting down the cluster.
+      when: >-
+        not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool) and
+        shutdown_ceph_health.stdout | trim != 'HEALTH_OK'
+
+- name: Pre-shutdown OpenShift health checks
   hosts: utility_vms
   become: true
   gather_facts: false
   vars:
     shutdown_kubeconfig_path: /root/kubeconfig-int
     shutdown_kubeconfig_src: /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/lb-int.kubeconfig
-    shutdown_delay_minutes: 2
   tasks:
     - name: Check if kubeconfig exists
       ansible.builtin.stat:
@@ -75,6 +100,93 @@
             mode: "0600"
           no_log: true
 
+    - name: Check cluster operators health
+      ansible.builtin.command:
+        cmd: >-
+          oc --kubeconfig {{ shutdown_kubeconfig_path }}
+          get co -o json
+      register: shutdown_co
+      changed_when: false
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
+
+    - name: Set degraded and progressing operator facts
+      ansible.builtin.set_fact:
+        shutdown_co_degraded: >-
+          {{ (shutdown_co.stdout | from_json)['items'] |
+             selectattr('status.conditions', 'defined') |
+             map(attribute='status.conditions') | flatten |
+             selectattr('type', 'eq', 'Degraded') |
+             selectattr('status', 'eq', 'True') | list }}
+        shutdown_co_progressing: >-
+          {{ (shutdown_co.stdout | from_json)['items'] |
+             selectattr('status.conditions', 'defined') |
+             map(attribute='status.conditions') | flatten |
+             selectattr('type', 'eq', 'Progressing') |
+             selectattr('status', 'eq', 'True') | list }}
+        shutdown_co_not_available: >-
+          {{ (shutdown_co.stdout | from_json)['items'] |
+             selectattr('status.conditions', 'defined') |
+             map(attribute='status.conditions') | flatten |
+             selectattr('type', 'eq', 'Available') |
+             rejectattr('status', 'eq', 'True') | list }}
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
+
+    - name: Display cluster operators status
+      ansible.builtin.debug:
+        msg: "All cluster operators are healthy: Available=True, Progressing=False, Degraded=False."
+      when: >-
+        not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool) and
+        shutdown_co_degraded | length == 0 and
+        shutdown_co_progressing | length == 0 and
+        shutdown_co_not_available | length == 0
+
+    - name: Fail if cluster operators are degraded or progressing
+      ansible.builtin.fail:
+        msg: >-
+          Cluster operators are not healthy.
+          Degraded: {{ shutdown_co_degraded | length }},
+          Progressing: {{ shutdown_co_progressing | length }},
+          Not Available: {{ shutdown_co_not_available | length }}.
+          Resolve cluster operator issues before shutting down.
+      when: >-
+        not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool) and
+        (shutdown_co_degraded | length > 0 or
+         shutdown_co_progressing | length > 0 or
+         shutdown_co_not_available | length > 0)
+
+    - name: Check for pending CSRs
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          oc --kubeconfig {{ shutdown_kubeconfig_path }}
+          get csr --no-headers 2>/dev/null |
+          grep -c Pending || echo 0
+      register: shutdown_csr_pending
+      changed_when: false
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
+
+    - name: Display CSR status
+      ansible.builtin.debug:
+        msg: "Pending CSRs: {{ shutdown_csr_pending.stdout | trim }}"
+      when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
+
+    - name: Fail if there are pending CSRs
+      ansible.builtin.fail:
+        msg: >-
+          Found {{ shutdown_csr_pending.stdout | trim }} pending CSR(s).
+          Approve or resolve pending CSRs before shutting down the cluster.
+      when: >-
+        not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool) and
+        (shutdown_csr_pending.stdout | trim | int) > 0
+
+- name: Gracefully shut down OpenShift nodes
+  hosts: utility_vms
+  become: true
+  gather_facts: false
+  vars:
+    shutdown_kubeconfig_path: /root/kubeconfig-int
+    shutdown_delay_minutes: 2
+  tasks:
     - name: Get OpenShift node names
       ansible.builtin.command:
         cmd: "oc --kubeconfig {{ shutdown_kubeconfig_path }} get nodes -o jsonpath='{.items[*].metadata.name}'"
