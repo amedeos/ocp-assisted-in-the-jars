@@ -1,0 +1,6 @@
+---
+csr_approver_kubeconfig: /root/kubeconfig-int
+csr_approver_duration: 600
+csr_approver_interval: 30
+csr_approver_log: /var/log/csr-approver.log
+csr_approver_script: /usr/local/bin/csr-approver.sh
