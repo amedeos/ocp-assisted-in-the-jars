@@ -1,0 +1,22 @@
+---
+- name: Deploy CSR approver script
+  ansible.builtin.template:
+    src: csr-approver.sh.j2
+    dest: "{{ csr_approver_script }}"
+    mode: "0755"
+
+- name: Start CSR approver in background
+  ansible.builtin.shell:
+    cmd: >-
+      nohup {{ csr_approver_script }} >> {{ csr_approver_log }} 2>&1 &
+      echo $!
+  register: csr_approver_pid
+  changed_when: true
+
+- name: Display CSR approver status
+  ansible.builtin.debug:
+    msg: >-
+      CSR approver running in background
+      (PID {{ csr_approver_pid.stdout | trim }},
+      duration {{ csr_approver_duration }}s,
+      log {{ csr_approver_log }})

@@ -129,6 +129,12 @@
         timeout: 600
       become: false
 
+    - name: Start background CSR approver
+      ansible.builtin.include_role:
+        name: csr_approver
+      vars:
+        csr_approver_kubeconfig: "{{ startup_kubeconfig_path }}"
+
     - name: Wait for valid cluster version
       ansible.builtin.command:
         cmd: >-
@@ -173,3 +179,21 @@
     - name: Display cluster readiness
       ansible.builtin.debug:
         msg: "OpenShift cluster is ready — version {{ startup_cv.stdout }}, all operators Available."
+
+    - name: Check if CSR approver is still running
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          ps -p {{ csr_approver_pid.stdout | trim }} > /dev/null 2>&1 &&
+          echo RUNNING || echo STOPPED
+      register: startup_csr_approver_status
+      changed_when: false
+      failed_when: false
+      when: csr_approver_pid is defined
+
+    - name: Display CSR approver final status
+      ansible.builtin.debug:
+        msg: >-
+          CSR approver {{ startup_csr_approver_status.stdout | default('UNKNOWN') | trim }}
+          (log {{ csr_approver_log | default('/var/log/csr-approver.log') }})
+      when: csr_approver_pid is defined

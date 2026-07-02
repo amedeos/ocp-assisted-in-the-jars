@@ -1,0 +1,50 @@
+#!/bin/bash
+# Managed by Ansible (ocp-assisted-in-the-jars). Do not edit by hand.
+#
+# Approves pending Kubernetes CSRs during cluster startup.
+# Runs in background for a configurable duration, cycling every INTERVAL
+# seconds to catch new CSRs that appear over time (e.g. client-cert wave
+# followed by server-cert wave).
+
+set -euo pipefail
+
+KUBECONFIG="{{ csr_approver_kubeconfig }}"
+DURATION="{{ csr_approver_duration }}"
+INTERVAL="{{ csr_approver_interval }}"
+LOG="{{ csr_approver_log }}"
+
+export KUBECONFIG
+
+log() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
+}
+
+log "CSR approver started (duration=${DURATION}s, interval=${INTERVAL}s)"
+
+end_time=$(( $(date +%s) + DURATION ))
+
+while [ "$(date +%s)" -lt "$end_time" ]; do
+  if ! oc get csr --no-headers > /dev/null 2>&1; then
+    log "API not reachable, retrying in ${INTERVAL}s"
+    sleep "$INTERVAL"
+    continue
+  fi
+
+  pending=$(oc get csr --no-headers 2>/dev/null | awk '$NF == "Pending" {print $1}')
+
+  if [ -z "$pending" ]; then
+    log "No pending CSRs found"
+  else
+    for csr in $pending; do
+      if oc adm certificate approve "$csr" >> "$LOG" 2>&1; then
+        log "Approved CSR: $csr"
+      else
+        log "Failed to approve CSR: $csr"
+      fi
+    done
+  fi
+
+  sleep "$INTERVAL"
+done
+
+log "CSR approver finished (duration elapsed)"
