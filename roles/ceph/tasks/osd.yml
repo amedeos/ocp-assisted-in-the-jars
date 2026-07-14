@@ -32,9 +32,28 @@
   delay: 10
   changed_when: false
 
-- name: Create CRUSH rule for SSD device class
+- name: Get current BlueStore slow-ops warn threshold
+  ansible.builtin.command: ceph config get osd bluestore_slow_ops_warn_threshold
+  register: ceph_slow_ops_threshold_current
+  changed_when: false
+
+- name: Set BlueStore slow-ops warn threshold
   ansible.builtin.command:
-    cmd: ceph osd crush rule create-replicated replicated_ssd default host ssd
+    cmd: >-
+      ceph config set osd bluestore_slow_ops_warn_threshold
+      {{ ceph_bluestore_slow_ops_warn_threshold }}
+  when: >-
+    ceph_slow_ops_threshold_current.stdout | trim
+    != ceph_bluestore_slow_ops_warn_threshold | string
+  changed_when: true
+
+- name: Create CRUSH rule for SSD device class
+  # Single-host Ceph: the failure domain must be OSD, not host. With a host
+  # failure domain CRUSH can never place the second replica (only one host
+  # exists), leaving every PG permanently active+clean+remapped (~50% objects
+  # misplaced) and deadlocking the upmap balancer.
+  ansible.builtin.command:
+    cmd: ceph osd crush rule create-replicated replicated_ssd default osd ssd
   register: ceph_crush_rule
   changed_when: "'already' not in ceph_crush_rule.stderr"
   failed_when: ceph_crush_rule.rc != 0 and 'already' not in ceph_crush_rule.stderr

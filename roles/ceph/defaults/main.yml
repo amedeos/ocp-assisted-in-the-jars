@@ -4,3 +4,9 @@ ceph_osd_devices:
   - /dev/vdc
   - /dev/vdd
 ceph_client_name: client.openshift
+
+# BlueStore slow-ops warning threshold. The default (1) makes a single
+# transient slow operation flap the cluster into HEALTH_WARN, which is
+# noisy on the lab's virtual (qcow2) OSD disks. Raise it so only a real
+# burst of slow ops raises the alert.
+ceph_bluestore_slow_ops_warn_threshold: 10
