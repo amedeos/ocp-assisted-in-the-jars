@@ -5,8 +5,21 @@ ceph_osd_devices:
   - /dev/vdd
 ceph_client_name: client.openshift
 
-# BlueStore slow-ops warning threshold. The default (1) makes a single
-# transient slow operation flap the cluster into HEALTH_WARN, which is
-# noisy on the lab's virtual (qcow2) OSD disks. Raise it so only a real
-# burst of slow ops raises the alert.
-ceph_bluestore_slow_ops_warn_threshold: 10
+# BlueStore slow-ops alerting. On the lab's virtual (qcow2) OSD disks a
+# slow RocksDB commit (slow_committed_kv) is routine, so the upstream
+# defaults (threshold 1, 24h window) keep the cluster permanently in
+# HEALTH_WARN and drown out real problems. A threshold of 10 was still
+# tripped within hours, so raise it far above any plausible lab rate and
+# shrink the window to 1h.
+#
+# This effectively silences BLUESTORE_SLOW_OP_ALERT -- acceptable here
+# because the underlying latency is an artefact of file-backed virtual
+# disks, not of Ceph. On real hardware, lower these back towards the
+# upstream defaults.
+ceph_bluestore_slow_ops_warn_threshold: 1000
+# Rolling window (seconds) over which slow ops are counted.
+ceph_bluestore_slow_ops_warn_lifetime: 3600
+
+_ceph_slow_ops_settings:
+  bluestore_slow_ops_warn_threshold: "{{ ceph_bluestore_slow_ops_warn_threshold }}"
+  bluestore_slow_ops_warn_lifetime: "{{ ceph_bluestore_slow_ops_warn_lifetime }}"

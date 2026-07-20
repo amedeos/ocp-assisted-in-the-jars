@@ -32,19 +32,21 @@
   delay: 10
   changed_when: false
 
-- name: Get current BlueStore slow-ops warn threshold
-  ansible.builtin.command: ceph config get osd bluestore_slow_ops_warn_threshold
-  register: ceph_slow_ops_threshold_current
+- name: Get current BlueStore slow-ops alert settings
+  ansible.builtin.command: "ceph config get osd {{ item.key }}"
+  register: ceph_slow_ops_current
+  loop: "{{ _ceph_slow_ops_settings | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
   changed_when: false
 
-- name: Set BlueStore slow-ops warn threshold
+- name: Set BlueStore slow-ops alert settings
   ansible.builtin.command:
-    cmd: >-
-      ceph config set osd bluestore_slow_ops_warn_threshold
-      {{ ceph_bluestore_slow_ops_warn_threshold }}
-  when: >-
-    ceph_slow_ops_threshold_current.stdout | trim
-    != ceph_bluestore_slow_ops_warn_threshold | string
+    cmd: "ceph config set osd {{ item.item.key }} {{ item.item.value }}"
+  loop: "{{ ceph_slow_ops_current.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when: item.stdout | trim != item.item.value | string
   changed_when: true
 
 - name: Create CRUSH rule for SSD device class
