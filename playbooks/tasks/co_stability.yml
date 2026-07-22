@@ -4,12 +4,14 @@
 #   1. queries `oc get co -o json`
 #   2. evaluates Available=True, Progressing=False, Degraded=False
 #   3. increments or resets startup_co_stable_count in a single set_fact
-#   4. waits startup_co_poll_interval seconds before the next iteration
+#   4. prints a progress or reset message
+#   5. waits startup_co_poll_interval seconds before the next iteration
 #
 # Each task has its own `when` guard so once the stability threshold is
 # reached the remaining iterations skip every task (no API calls, no
-# pauses).  Ansible has no early-break from loops, so skipped iterations
-# still emit one banner per task — this is inherent to include_tasks loops.
+# pauses, no messages).  Ansible has no early-break from loops, so
+# skipped iterations still emit one banner per task — this is inherent
+# to include_tasks loops.
 #
 # The | int filter is applied to every comparison of
 # startup_co_stable_count to stay correct on ansible-core < 2.19 where
@@ -57,6 +59,26 @@
         else 0
       }}
   when: startup_co_stable_count | int < startup_co_stable_threshold
+
+- name: Show stability progress
+  ansible.builtin.debug:
+    msg: >-
+      Cluster operators: {{ startup_co_stable_count }}/{{ startup_co_stable_threshold }}
+      stable checks ({{ startup_co_stable_count | int * startup_co_poll_interval }}s/
+      {{ startup_co_stable_threshold | int * startup_co_poll_interval }}s)
+      — {{ startup_co_stable_threshold | int - startup_co_stable_count | int }}
+      checks ({{ (startup_co_stable_threshold | int - startup_co_stable_count | int) * startup_co_poll_interval }}s) remaining
+  when: >-
+    startup_co_stable_count | int < startup_co_stable_threshold and
+    startup_co_stable_count | int > 0
+
+- name: Show stability reset
+  ansible.builtin.debug:
+    msg: >-
+      Cluster operators: check failed, stability counter reset
+      (0/{{ startup_co_stable_threshold }},
+      0s/{{ startup_co_stable_threshold | int * startup_co_poll_interval }}s)
+  when: startup_co_stable_count | int == 0
 
 - name: Pause before next poll
   ansible.builtin.pause:
