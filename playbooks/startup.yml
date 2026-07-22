@@ -120,6 +120,9 @@
   gather_facts: false
   vars:
     startup_kubeconfig_path: /root/kubeconfig-int
+    startup_co_total_timeout: 1800    # overall timeout in seconds (30 min)
+    startup_co_poll_interval: 15      # seconds between polls
+    startup_co_stable_threshold: 20  # consecutive stable checks required (5 min)
   tasks:
     - name: Wait for API VIP to be reachable
       ansible.builtin.wait_for:
@@ -154,27 +157,23 @@
       ansible.builtin.debug:
         msg: "Cluster version: {{ startup_cv.stdout | default('not available') }}"
 
-    - name: Wait for all cluster operators to be available and not degraded
-      ansible.builtin.command:
-        cmd: >-
-          oc --kubeconfig {{ startup_kubeconfig_path }}
-          get co -o json
-      register: startup_co
-      until: >-
-        startup_co.rc == 0 and
-        (startup_co.stdout | from_json)['items'] |
-          map(attribute='status.conditions') | flatten |
-          selectattr('type', 'eq', 'Degraded') |
-          selectattr('status', 'eq', 'True') | list | length == 0
-        and
-        (startup_co.stdout | from_json)['items'] |
-          map(attribute='status.conditions') | flatten |
-          selectattr('type', 'eq', 'Available') |
-          rejectattr('status', 'eq', 'True') | list | length == 0
-      retries: 60
-      delay: 10
-      changed_when: false
-      failed_when: false
+    - name: Initialise stability counter
+      ansible.builtin.set_fact:
+        startup_co_stable_count: 0
+
+    - name: Poll cluster operators with stability window (max 30 min, need 5 min stable)
+      ansible.builtin.include_tasks: tasks/co_stability.yml
+      loop: "{{ range(0, (startup_co_total_timeout | int // startup_co_poll_interval | int) + 1) | list }}"
+      loop_control:
+        loop_var: startup_co_iter
+
+    - name: Fail if cluster operators never reached stability
+      ansible.builtin.fail:
+        msg: >-
+          Timed out after {{ startup_co_total_timeout }}s: cluster operators
+          did not remain stable for {{ startup_co_stable_threshold }} consecutive
+          checks. Last stable streak: {{ startup_co_stable_count }}.
+      when: startup_co_stable_count | int < startup_co_stable_threshold
 
     - name: Display cluster readiness
       ansible.builtin.debug:
