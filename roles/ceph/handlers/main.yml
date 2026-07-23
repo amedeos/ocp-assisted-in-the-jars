@@ -1,6 +1,6 @@
 ---
 - name: Restart ceph
-  ansible.builtin.command: cephadm shell -- ceph orch restart mon
+  ansible.builtin.command: "{{ ceph_cmd }} orch restart mon"
   changed_when: true
   listen: Restart ceph
 

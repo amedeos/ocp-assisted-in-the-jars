@@ -94,6 +94,21 @@ ceph_config:
   pg_num: 128
   dashboard_enabled: false
 
+# How cluster commands are invoked on the ceph VM.
+#
+# Do NOT use the host `ceph` binary. cephadm bootstraps from the mutable
+# tag registry.redhat.io/rhceph/rhceph-9-rhel9:latest, and the RHEL 10
+# ceph-common RPM lags behind it: as of the 2026-07-20 image rebuild the
+# container issues AES-256 cephx keys (type 2) that the older host client
+# cannot parse, failing with "Malformed input" on every command. Nor can
+# the keys be downgraded -- the mon rejects AES-128 keys outright.
+#
+# Running through `cephadm shell` uses the container image that matches
+# the cluster, so it stays correct on both sides of the skew. Revert to a
+# bare "ceph" only once the el10 tools repo ships a client that keeps pace
+# with the image.
+ceph_cmd: "cephadm shell -- ceph"
+
 # Hypervisor settings
 hypervisor:
   enable_nat: true
