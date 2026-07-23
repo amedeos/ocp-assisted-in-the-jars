@@ -101,8 +101,22 @@
       mon 'profile rbd'
       osd 'profile rbd pool={{ ceph_config.pool_name }}'
       mgr 'profile rbd pool={{ ceph_config.pool_name }}'
+      {{ '--key-type AES' if ceph_cephx_aes128_compat | bool else '' }}
   register: ceph_cephx_key
   changed_when: false
+  no_log: true
+
+- name: Re-key CephX credentials to AES-128
+  # get-or-create returns the existing key untouched, so a client.openshift
+  # left over from a bootstrap that predates cephx_compat.yml would still be
+  # AES-256 and unreadable by ODF. Rotate it in that case. AES-128 keys are
+  # "AQ..." in base64, AES-256 "Ag...".
+  ansible.builtin.command:
+    cmd: "{{ ceph_cmd }} auth rotate {{ ceph_client_name }} --key-type AES"
+  when:
+    - ceph_cephx_aes128_compat | bool
+    - not (ceph_cephx_key.stdout | regex_search('key = (\\S+)', '\\1') | first).startswith('AQ')
+  changed_when: true
   no_log: true
 
 - name: Get Ceph cluster FSID

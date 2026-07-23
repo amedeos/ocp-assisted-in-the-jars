@@ -88,6 +88,24 @@ chosen on console.redhat.com, not in Ansible variables.
 To override (e.g., ODF 4.22 not yet released), set
 `odf_channel_override: "stable-4.21"` in extra-vars or group_vars.
 
+### Ceph client / cephx cipher skew
+
+`cephadm` bootstraps from the mutable tag
+`registry.redhat.io/rhceph/rhceph-9-rhel9:latest`, which moves ahead of
+both the RHEL 10 `ceph-common` RPM and the Ceph client bundled in ODF.
+Since the 2026-07-20 image rebuild the cluster issues AES-256 cephx
+keys that those older clients cannot parse (`Malformed input`). Two
+consequences, both handled in the `ceph` role:
+
+- Cluster commands run as `{{ ceph_cmd }}` (`cephadm shell -- ceph`),
+  never the host `ceph` binary. See `ceph_cmd` in `group_vars`.
+- `cephx_compat.yml` allows the older AES-128 cipher in the monmap and
+  re-keys the two entities ODF consumes (`client.admin`,
+  `client.openshift`). Toggle with `ceph_cephx_aes128_compat`.
+
+Drop both once the el10 tools repo and ODF ship clients that keep pace
+with the image.
+
 ### Node definitions
 
 All VMs defined in `inventory/group_vars/all/main.yml` under

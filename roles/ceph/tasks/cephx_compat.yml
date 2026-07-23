@@ -1,0 +1,82 @@
+---
+# ODF ships its own Ceph client, and it is older than the container image
+# cephadm bootstraps from. ODF 4.22 carries ceph 20.2.1-294 -- the same build
+# as the RHEL 10 host RPM -- while registry.redhat.io/rhceph/rhceph-9-rhel9
+# moved to 20.2.1-324 with the 2026-07-20 rebuild. Since that rebuild the
+# cluster issues AES-256 cephx keys (type 2, base64 "Ag..."), which the older
+# client cannot parse: it fails with "Malformed input [buffer:3]" and rook
+# never gets past "failed get-or-create-key client.ceph-exporter", leaving the
+# StorageCluster stuck in phase Error.
+#
+# The monmap of the new image allows only the aes256k cipher. Allowing the
+# older aes cipher as well lets the two entities that leave the cluster --
+# client.admin and client.openshift, both consumed by ODF -- carry AES-128
+# keys, which is what every deploy before the rebuild already used. The
+# mon/mgr/osd daemon keys stay AES-256 and keep talking to their own -324
+# daemons, so aes256k must remain in the list.
+#
+# This knowingly downgrades those two keys to a cipher the new build labels
+# insecure. It is the trade-off for tracking a moving :latest tag rather than
+# pinning the image and freezing Ceph updates. Set ceph_cephx_aes128_compat to
+# false to drop the workaround once ODF ships a client that reads AES-256.
+
+- name: Get monmap auth cipher configuration
+  ansible.builtin.command: "{{ ceph_cmd }} mon dump -f json"
+  register: ceph_compat_monmap
+  changed_when: false
+
+- name: Allow the AES-128 cipher alongside AES-256
+  ansible.builtin.command: "{{ ceph_cmd }} mon set auth_allowed_ciphers aes256k,aes"
+  when: >-
+    'aes' not in (ceph_compat_monmap.stdout | from_json).auth_allowed_ciphers
+    | map(attribute='name') | list
+  changed_when: true
+
+- name: Get current insecure-key setting
+  ansible.builtin.command: "{{ ceph_cmd }} config get mon mon_auth_allow_insecure_key"
+  register: ceph_compat_insecure_key
+  changed_when: false
+
+- name: Permit creation of AES-128 keys
+  # Without this the mon refuses outright:
+  # "creating key with insecure key type (aes) not allowed"
+  ansible.builtin.command: "{{ ceph_cmd }} config set mon mon_auth_allow_insecure_key true"
+  when: ceph_compat_insecure_key.stdout | trim | lower != 'true'
+  changed_when: true
+
+- name: Get current client.admin key
+  ansible.builtin.command: "{{ ceph_cmd }} auth get-key client.admin"
+  register: ceph_compat_admin_key
+  changed_when: false
+  no_log: true
+
+- name: Re-key client.admin to AES-128
+  # bootstrap already wrote an AES-256 admin key, so it has to be rotated
+  # rather than created. AES-128 keys are "AQ..." in base64, AES-256 "Ag...".
+  when: not ceph_compat_admin_key.stdout.startswith('AQ')
+  block:
+    - name: Get Ceph cluster FSID
+      ansible.builtin.command: "{{ ceph_cmd }} fsid"
+      register: ceph_compat_fsid
+      changed_when: false
+
+    - name: Rotate client.admin onto an AES-128 key
+      ansible.builtin.command: "{{ ceph_cmd }} auth rotate client.admin --key-type AES"
+      register: ceph_compat_admin_rotate
+      changed_when: true
+      no_log: true
+
+    - name: Install the rotated admin keyring
+      # cephadm authenticates from its own copy under the cluster config dir,
+      # not from /etc/ceph, and redistributes it to hosts labelled _admin.
+      # Leaving that copy stale locks `cephadm shell` out of the cluster.
+      ansible.builtin.copy:
+        content: "{{ ceph_compat_admin_rotate.stdout }}\n"
+        dest: "{{ item }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - /etc/ceph/ceph.client.admin.keyring
+        - "/var/lib/ceph/{{ ceph_compat_fsid.stdout | trim }}/config/ceph.client.admin.keyring"
+      no_log: true
