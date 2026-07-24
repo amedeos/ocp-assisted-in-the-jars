@@ -23,20 +23,20 @@
     msg: "ODF channel: {{ odf_channel }} (cluster version: {{ odf_cluster_version.stdout }})"
 
 - name: Get Ceph FSID
-  ansible.builtin.command: ceph fsid
+  ansible.builtin.command: "{{ ceph_cmd }} fsid"
   register: odf_ceph_fsid_result
   changed_when: false
   delegate_to: ceph
 
 - name: Get CephX key for OpenShift
-  ansible.builtin.command: "ceph auth get-key {{ odf_ceph_client_name }}"
+  ansible.builtin.command: "{{ ceph_cmd }} auth get-key {{ odf_ceph_client_name }}"
   register: odf_ceph_key_result
   changed_when: false
   delegate_to: ceph
   no_log: true
 
 - name: Get Ceph admin key
-  ansible.builtin.command: ceph auth get-key client.admin
+  ansible.builtin.command: "{{ ceph_cmd }} auth get-key client.admin"
   register: odf_ceph_admin_key_result
   changed_when: false
   delegate_to: ceph

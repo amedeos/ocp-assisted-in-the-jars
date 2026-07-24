@@ -66,7 +66,7 @@
   tasks:
     - name: Wait for Ceph to be healthy
       ansible.builtin.command:
-        cmd: ceph health
+        cmd: "{{ ceph_cmd }} health"
       register: startup_ceph_health
       until: startup_ceph_health.stdout | trim in ['HEALTH_OK', 'HEALTH_WARN']
       retries: 60
@@ -75,7 +75,7 @@
 
     - name: Display Ceph status
       ansible.builtin.command:
-        cmd: ceph -s
+        cmd: "{{ ceph_cmd }} -s"
       register: startup_ceph_status
       changed_when: false
 

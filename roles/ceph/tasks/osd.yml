@@ -5,7 +5,7 @@
   changed_when: false
 
 - name: Check existing OSDs
-  ansible.builtin.command: ceph osd tree -f json
+  ansible.builtin.command: "{{ ceph_cmd }} osd tree -f json"
   register: ceph_osd_tree
   changed_when: false
 
@@ -14,7 +14,7 @@
   # back-to-back adds race against the refresh and silently no-op (rc 0, no
   # "Created osd"). Retry each device until it is actually consumed.
   ansible.builtin.command:
-    cmd: "ceph orch daemon add osd {{ ceph_osd_hostname.stdout }}:{{ item }}"
+    cmd: "{{ ceph_cmd }} orch daemon add osd {{ ceph_osd_hostname.stdout }}:{{ item }}"
   loop: "{{ ceph_osd_devices }}"
   register: ceph_osd_add
   until: "'Created osd' in ceph_osd_add.stdout or 'already' in ceph_osd_add.stderr"
@@ -25,7 +25,7 @@
   when: (ceph_osd_tree.stdout | from_json).nodes | selectattr('type', 'eq', 'osd') | list | length < ceph_osd_devices | length
 
 - name: Wait for all OSDs to be up
-  ansible.builtin.command: ceph osd stat -f json
+  ansible.builtin.command: "{{ ceph_cmd }} osd stat -f json"
   register: ceph_osd_stat
   until: (ceph_osd_stat.stdout | from_json).num_up_osds | int >= ceph_osd_devices | length
   retries: 30
@@ -33,7 +33,7 @@
   changed_when: false
 
 - name: Get current BlueStore slow-ops alert settings
-  ansible.builtin.command: "ceph config get osd {{ item.key }}"
+  ansible.builtin.command: "{{ ceph_cmd }} config get osd {{ item.key }}"
   register: ceph_slow_ops_current
   loop: "{{ _ceph_slow_ops_settings | dict2items }}"
   loop_control:
@@ -42,7 +42,7 @@
 
 - name: Set BlueStore slow-ops alert settings
   ansible.builtin.command:
-    cmd: "ceph config set osd {{ item.item.key }} {{ item.item.value }}"
+    cmd: "{{ ceph_cmd }} config set osd {{ item.item.key }} {{ item.item.value }}"
   loop: "{{ ceph_slow_ops_current.results }}"
   loop_control:
     label: "{{ item.item.key }}"
@@ -55,41 +55,41 @@
   # exists), leaving every PG permanently active+clean+remapped (~50% objects
   # misplaced) and deadlocking the upmap balancer.
   ansible.builtin.command:
-    cmd: ceph osd crush rule create-replicated replicated_ssd default osd ssd
+    cmd: "{{ ceph_cmd }} osd crush rule create-replicated replicated_ssd default osd ssd"
   register: ceph_crush_rule
   changed_when: "'already' not in ceph_crush_rule.stderr"
   failed_when: ceph_crush_rule.rc != 0 and 'already' not in ceph_crush_rule.stderr
 
 - name: Check if pool exists
-  ansible.builtin.command: "ceph osd pool ls"
+  ansible.builtin.command: "{{ ceph_cmd }} osd pool ls"
   register: ceph_pool_list
   changed_when: false
 
 - name: Create storage pool for OpenShift
   ansible.builtin.command:
     cmd: >-
-      ceph osd pool create {{ ceph_config.pool_name }}
+      {{ ceph_cmd }} osd pool create {{ ceph_config.pool_name }}
       {{ ceph_config.pg_num }}
   when: ceph_config.pool_name not in ceph_pool_list.stdout_lines
   changed_when: true
 
 - name: Set pool to use SSD CRUSH rule
   ansible.builtin.command:
-    cmd: "ceph osd pool set {{ ceph_config.pool_name }} crush_rule replicated_ssd"
+    cmd: "{{ ceph_cmd }} osd pool set {{ ceph_config.pool_name }} crush_rule replicated_ssd"
   register: ceph_pool_crush
   changed_when: "'set' in ceph_pool_crush.stdout"
   failed_when: ceph_pool_crush.rc != 0
 
 - name: Enable RBD application on pool
   ansible.builtin.command:
-    cmd: "ceph osd pool application enable {{ ceph_config.pool_name }} rbd"
+    cmd: "{{ ceph_cmd }} osd pool application enable {{ ceph_config.pool_name }} rbd"
   register: ceph_rbd_enable
   changed_when: "'enabled' in ceph_rbd_enable.stdout"
   failed_when: ceph_rbd_enable.rc != 0 and 'already' not in ceph_rbd_enable.stderr
 
 - name: Enable Ceph prometheus module for ODF monitoring
   ansible.builtin.command:
-    cmd: ceph mgr module enable prometheus
+    cmd: "{{ ceph_cmd }} mgr module enable prometheus"
   register: ceph_prometheus_enable
   changed_when: "'already' not in ceph_prometheus_enable.stderr"
   failed_when: ceph_prometheus_enable.rc != 0 and 'already' not in ceph_prometheus_enable.stderr
@@ -97,21 +97,35 @@
 - name: Create CephX credentials for OpenShift ODF
   ansible.builtin.command:
     cmd: >-
-      ceph auth get-or-create {{ ceph_client_name }}
+      {{ ceph_cmd }} auth get-or-create {{ ceph_client_name }}
       mon 'profile rbd'
       osd 'profile rbd pool={{ ceph_config.pool_name }}'
       mgr 'profile rbd pool={{ ceph_config.pool_name }}'
+      {{ '--key-type AES' if ceph_cephx_aes128_compat | bool else '' }}
   register: ceph_cephx_key
   changed_when: false
   no_log: true
 
+- name: Re-key CephX credentials to AES-128
+  # get-or-create returns the existing key untouched, so a client.openshift
+  # left over from a bootstrap that predates cephx_compat.yml would still be
+  # AES-256 and unreadable by ODF. Rotate it in that case. AES-128 keys are
+  # "AQ..." in base64, AES-256 "Ag...".
+  ansible.builtin.command:
+    cmd: "{{ ceph_cmd }} auth rotate {{ ceph_client_name }} --key-type AES"
+  when:
+    - ceph_cephx_aes128_compat | bool
+    - not (ceph_cephx_key.stdout | regex_search('key = (\\S+)', '\\1') | first).startswith('AQ')
+  changed_when: true
+  no_log: true
+
 - name: Get Ceph cluster FSID
-  ansible.builtin.command: ceph fsid
+  ansible.builtin.command: "{{ ceph_cmd }} fsid"
   register: ceph_fsid
   changed_when: false
 
 - name: Get Ceph monitor endpoints
-  ansible.builtin.command: ceph mon dump -f json
+  ansible.builtin.command: "{{ ceph_cmd }} mon dump -f json"
   register: ceph_mon_dump
   changed_when: false
 

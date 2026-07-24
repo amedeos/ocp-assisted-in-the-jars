@@ -36,7 +36,7 @@
   tasks:
     - name: Check Ceph health is HEALTH_OK
       ansible.builtin.command:
-        cmd: ceph health
+        cmd: "{{ ceph_cmd }} health"
       register: shutdown_ceph_health
       changed_when: false
       when: not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)

@@ -5,6 +5,10 @@
 - name: Bootstrap Ceph cluster
   ansible.builtin.include_tasks: bootstrap.yml
 
+- name: Allow AES-128 cephx keys for ODF compatibility
+  ansible.builtin.include_tasks: cephx_compat.yml
+  when: ceph_cephx_aes128_compat | bool
+
 - name: Mark OSD devices as SSD via udev
   ansible.builtin.include_tasks: udev_ssd.yml
 
