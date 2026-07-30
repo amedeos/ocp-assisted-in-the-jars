@@ -1,3 +1,12 @@
 ---
 dnsmasq_upstream_dns: "{{ dns_forwarder }}"
 dnsmasq_lease_time: infinite
+
+# Health check (tasks/health.yml). The query target is the utility LAN
+# address, not 127.0.0.1 -- see the comment in tasks/health.yml.
+dnsmasq_health_query_ip: "{{ (utility_nodes | first).ip }}"
+dnsmasq_health_external_name: console.redhat.com
+dnsmasq_health_check_external: true
+dnsmasq_health_dig_timeout: 2
+dnsmasq_health_retries: 3
+dnsmasq_health_delay: 5

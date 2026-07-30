@@ -29,6 +29,19 @@
       when: shutdown_all_off | bool
       run_once: true
 
+- name: Pre-shutdown DNS health check
+  hosts: utility_vms
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify dnsmasq is answering on the LAN address
+      ansible.builtin.include_role:
+        name: dnsmasq
+        tasks_from: health
+      when: >-
+        shutdown_dns_check | default(true) | bool and
+        not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool)
+
 - name: Pre-shutdown Ceph health check
   hosts: ceph_vms
   become: true

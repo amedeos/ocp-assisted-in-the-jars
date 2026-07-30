@@ -22,19 +22,18 @@
       run_once: true
       become: false
 
-- name: Verify dnsmasq is running
+- name: Verify dnsmasq is serving DNS
   hosts: utility_vms
   become: true
   gather_facts: false
   tasks:
-    - name: Wait for dnsmasq to be running
-      ansible.builtin.service_facts:
-      register: startup_service_facts
-      until: >-
-        startup_service_facts.ansible_facts.services['dnsmasq.service'] is defined and
-        startup_service_facts.ansible_facts.services['dnsmasq.service'].state == 'running'
-      retries: 30
-      delay: 5
+    - name: Verify dnsmasq is answering on the LAN address
+      ansible.builtin.include_role:
+        name: dnsmasq
+        tasks_from: health
+      vars:
+        dnsmasq_health_retries: 30
+        dnsmasq_health_delay: 5
 
 - name: Start ceph VM and verify health
   hosts: hypervisors
