@@ -1,0 +1,89 @@
+---
+# Functional health check for dnsmasq on the utility VM.
+#
+# Deliberately queries the LAN address rather than 127.0.0.1: dnsmasq is
+# configured with bind-interfaces, which binds interfaces once at startup.
+# When dnsmasq wins the boot race against NetworkManager it binds only to
+# loopback -- the service still reports "active", DHCP still works (raw
+# sockets), and localhost queries still answer, but no client on the network
+# can resolve anything. Only an off-loopback query detects that state.
+
+- name: Resolve internal record through dnsmasq on its LAN address
+  ansible.builtin.command:
+    cmd: >-
+      dig +short +time={{ dnsmasq_health_dig_timeout }} +tries=1
+      api.{{ domain }} @{{ dnsmasq_health_query_ip }}
+  register: dnsmasq_health_internal
+  until: >-
+    dnsmasq_health_internal.rc == 0 and
+    dnsmasq_health_internal.stdout | trim == vip.api
+  retries: "{{ dnsmasq_health_retries }}"
+  delay: "{{ dnsmasq_health_delay }}"
+  changed_when: false
+  failed_when: false
+
+- name: Resolve external record to verify upstream forwarding
+  ansible.builtin.command:
+    cmd: >-
+      dig +short +time={{ dnsmasq_health_dig_timeout }} +tries=1
+      {{ dnsmasq_health_external_name }} @{{ dnsmasq_health_query_ip }}
+  register: dnsmasq_health_external
+  until: >-
+    dnsmasq_health_external.rc == 0 and
+    dnsmasq_health_external.stdout | trim | length > 0
+  retries: "{{ dnsmasq_health_retries }}"
+  delay: "{{ dnsmasq_health_delay }}"
+  changed_when: false
+  failed_when: false
+  when: dnsmasq_health_check_external | bool
+
+- name: Set dnsmasq health failure fact
+  ansible.builtin.set_fact:
+    dnsmasq_health_failed: >-
+      {{ (dnsmasq_health_internal.stdout | default('') | trim != vip.api) or
+         (dnsmasq_health_check_external | bool and
+          dnsmasq_health_external.stdout | default('') | trim | length == 0) }}
+
+- name: Collect diagnostics for the failure report
+  when: dnsmasq_health_failed | bool
+  block:
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: List listening sockets on port 53
+      ansible.builtin.command:
+        cmd: ss -lntuH sport = :53
+      register: dnsmasq_health_sockets
+      changed_when: false
+      failed_when: false
+
+- name: Report healthy dnsmasq
+  ansible.builtin.debug:
+    msg: >-
+      dnsmasq on {{ dnsmasq_health_query_ip }} is serving DNS:
+      api.{{ domain }} -> {{ dnsmasq_health_internal.stdout | trim }};
+      upstream forwarding
+      {{ 'verified via ' ~ dnsmasq_health_external_name if dnsmasq_health_check_external | bool
+         else 'not checked' }}.
+  when: not (dnsmasq_health_failed | bool)
+
+- name: Fail if dnsmasq is not serving DNS on its LAN address
+  ansible.builtin.fail:
+    msg: >-
+      dnsmasq on the utility VM is not answering queries on
+      {{ dnsmasq_health_query_ip }}:53.
+      Internal lookup api.{{ domain }} returned
+      '{{ dnsmasq_health_internal.stdout | default('') | trim }}'
+      (expected {{ vip.api }}).
+      {% if dnsmasq_health_check_external | bool -%}
+      External lookup {{ dnsmasq_health_external_name }} returned
+      '{{ dnsmasq_health_external.stdout | default('') | trim }}'.
+      {% endif -%}
+      Service state:
+      {{ ansible_facts.services['dnsmasq.service'].state | default('unknown') }}.
+      Listening sockets on port 53:
+      {{ dnsmasq_health_sockets.stdout_lines | default([]) | join(' | ') | default('none', true) }}.
+      Most likely cause: dnsmasq uses bind-interfaces and lost the boot race
+      against NetworkManager, binding only to loopback.
+      Fix with 'systemctl restart dnsmasq' on the utility VM, then re-run.
+  when: dnsmasq_health_failed | bool
