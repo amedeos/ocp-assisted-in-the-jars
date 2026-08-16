@@ -26,6 +26,8 @@
   register: registry_auth_secret_raw
   changed_when: false
   failed_when: false
+  # Read-only: must run in check mode too, everything below depends on it.
+  check_mode: false
   no_log: true
 
 - name: Fail if the global pull secret cannot be read
@@ -90,18 +92,21 @@
           get mcp -o json
       register: registry_auth_mcp
       vars:
-        # ['items'] and not .items: on a dict the latter resolves to the
-        # dict method instead of the key.
+        # .get('items', []) and not .items / ['items']: on a dict both of
+        # those resolve to the dict method rather than the key (subscript
+        # lookup falls back to attribute lookup when the key is absent).
+        registry_auth_mcp_items: >-
+          {{ (registry_auth_mcp.stdout | default('{}', true)
+              | from_json).get('items', []) }}
         registry_auth_mcp_conditions: >-
-          {{ (registry_auth_mcp.stdout | default('{}') | from_json)['items']
-             | default([]) | map(attribute='status.conditions')
-             | flatten | list }}
+          {{ registry_auth_mcp_items
+             | map(attribute='status.conditions') | flatten | list }}
       until: >-
         registry_auth_mcp.rc == 0 and
         registry_auth_mcp_conditions
           | selectattr('type', 'eq', 'Updated')
           | selectattr('status', 'eq', 'True') | list | length
-        == (registry_auth_mcp.stdout | from_json)['items'] | length
+        == registry_auth_mcp_items | length
         and
         registry_auth_mcp_conditions
           | selectattr('type', 'eq', 'Degraded')
@@ -109,13 +114,18 @@
       retries: "{{ registry_auth_mcp_retries }}"
       delay: "{{ registry_auth_mcp_delay }}"
       changed_when: false
-      when: registry_auth_wait_mcp | bool
+      # Nothing was applied in check mode, so there is no rollout to wait for.
+      when:
+        - registry_auth_wait_mcp | bool
+        - not ansible_check_mode
   always:
     - name: Remove the temporary pull secret file
       ansible.builtin.file:
         path: "{{ registry_auth_tmp_file }}"
         state: absent
 
+# Skipped in check mode: the update above did not actually run, so the
+# read-back would legitimately not show the new registries yet.
 - name: Read back the global pull secret
   ansible.builtin.command:
     cmd: >-
@@ -123,6 +133,7 @@
       get secret pull-secret -n openshift-config -o json
   register: registry_auth_verify_raw
   changed_when: false
+  when: not ansible_check_mode
   no_log: true
 
 - name: Verify the additional registries are present in the pull secret
@@ -131,6 +142,7 @@
       - item in registry_auth_verify_auths
     fail_msg: "Registry {{ item }} is missing from the cluster pull secret."
   loop: "{{ registry_auth_registries | map(attribute='registry') | list }}"
+  when: not ansible_check_mode
   vars:
     registry_auth_verify_auths: >-
       {{ ((registry_auth_verify_raw.stdout | from_json).data['.dockerconfigjson']
