@@ -1,0 +1,145 @@
+---
+# Loops over indices rather than the entries themselves: the task result
+# would otherwise echo the whole entry (password included), and no_log here
+# would censor the reason the validation failed.
+- name: Validate the additional registry entries
+  ansible.builtin.assert:
+    that:
+      - registry_auth_registries[item].registry is defined
+      - registry_auth_registries[item].username is defined
+      - registry_auth_registries[item].password is defined
+    fail_msg: >-
+      registry_auths entry #{{ item }}
+      ({{ registry_auth_registries[item].registry | default('no registry key') }})
+      must define registry, username and password.
+  loop: "{{ range(registry_auth_registries | length) | list }}"
+  loop_control:
+    label: "{{ registry_auth_registries[item].registry | default('entry #' ~ item) }}"
+
+# no_log hides the stdout (it is the pull secret), so the exit code is
+# checked separately to keep the failure message readable.
+- name: Read the current global pull secret
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ registry_auth_kubeconfig_path }}
+      get secret pull-secret -n openshift-config -o json
+  register: registry_auth_secret_raw
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Fail if the global pull secret cannot be read
+  ansible.builtin.fail:
+    msg: >-
+      Could not read secret pull-secret in namespace openshift-config with
+      kubeconfig {{ registry_auth_kubeconfig_path }} (oc exit code
+      {{ registry_auth_secret_raw.rc }}): {{ registry_auth_secret_raw.stderr }}
+  when: registry_auth_secret_raw.rc != 0
+
+- name: Decode the current global pull secret
+  ansible.builtin.set_fact:
+    registry_auth_current: >-
+      {{ (registry_auth_secret_raw.stdout | from_json).data['.dockerconfigjson']
+         | b64decode | from_json }}
+  no_log: true
+
+- name: Build the auth entries for the additional registries
+  ansible.builtin.set_fact:
+    registry_auth_entries: >-
+      {{ registry_auth_entries | default({}) | combine({
+           item.registry: {
+             'auth': (item.username ~ ':' ~ item.password) | b64encode,
+             'email': item.email | default('')
+           }
+         }) }}
+  loop: "{{ registry_auth_registries }}"
+  loop_control:
+    label: "{{ item.registry }}"
+  no_log: true
+
+- name: Merge the additional registries into the pull secret
+  ansible.builtin.set_fact:
+    registry_auth_merged: >-
+      {{ registry_auth_current
+         | combine({'auths': registry_auth_entries}, recursive=True) }}
+  no_log: true
+
+- name: Update the global pull secret
+  when: registry_auth_merged != registry_auth_current
+  block:
+    - name: Write the merged pull secret to a temporary file
+      ansible.builtin.copy:
+        content: "{{ registry_auth_merged | to_json }}"
+        dest: "{{ registry_auth_tmp_file }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Apply the merged pull secret to the cluster
+      ansible.builtin.command:
+        cmd: >-
+          oc --kubeconfig {{ registry_auth_kubeconfig_path }}
+          set data secret/pull-secret -n openshift-config
+          --from-file=.dockerconfigjson={{ registry_auth_tmp_file }}
+      register: registry_auth_update
+      changed_when: true
+
+    - name: Wait for the machine config pools to settle
+      ansible.builtin.command:
+        cmd: >-
+          oc --kubeconfig {{ registry_auth_kubeconfig_path }}
+          get mcp -o json
+      register: registry_auth_mcp
+      vars:
+        # ['items'] and not .items: on a dict the latter resolves to the
+        # dict method instead of the key.
+        registry_auth_mcp_conditions: >-
+          {{ (registry_auth_mcp.stdout | default('{}') | from_json)['items']
+             | default([]) | map(attribute='status.conditions')
+             | flatten | list }}
+      until: >-
+        registry_auth_mcp.rc == 0 and
+        registry_auth_mcp_conditions
+          | selectattr('type', 'eq', 'Updated')
+          | selectattr('status', 'eq', 'True') | list | length
+        == (registry_auth_mcp.stdout | from_json)['items'] | length
+        and
+        registry_auth_mcp_conditions
+          | selectattr('type', 'eq', 'Degraded')
+          | selectattr('status', 'eq', 'True') | list | length == 0
+      retries: "{{ registry_auth_mcp_retries }}"
+      delay: "{{ registry_auth_mcp_delay }}"
+      changed_when: false
+      when: registry_auth_wait_mcp | bool
+  always:
+    - name: Remove the temporary pull secret file
+      ansible.builtin.file:
+        path: "{{ registry_auth_tmp_file }}"
+        state: absent
+
+- name: Read back the global pull secret
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ registry_auth_kubeconfig_path }}
+      get secret pull-secret -n openshift-config -o json
+  register: registry_auth_verify_raw
+  changed_when: false
+  no_log: true
+
+- name: Verify the additional registries are present in the pull secret
+  ansible.builtin.assert:
+    that:
+      - item in registry_auth_verify_auths
+    fail_msg: "Registry {{ item }} is missing from the cluster pull secret."
+  loop: "{{ registry_auth_registries | map(attribute='registry') | list }}"
+  vars:
+    registry_auth_verify_auths: >-
+      {{ ((registry_auth_verify_raw.stdout | from_json).data['.dockerconfigjson']
+          | b64decode | from_json)['auths'] }}
+
+- name: Display the configured additional registries
+  ansible.builtin.debug:
+    msg:
+      - "Additional registries merged into openshift-config/pull-secret:"
+      - "{{ registry_auth_registries | map(attribute='registry') | join(', ') }}"
+      - "The Machine Config Operator propagates it to /var/lib/kubelet/config.json"
+      - "on every node; no node reboot is triggered."

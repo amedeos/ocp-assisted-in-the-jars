@@ -1,0 +1,14 @@
+---
+registry_auth_kubeconfig_path: /root/kubeconfig-int
+
+# Additional registries to merge into the cluster-wide pull secret.
+# Defined as `registry_auths` in the vault (see vault.yml.example).
+registry_auth_registries: "{{ registry_auths | default([]) }}"
+
+# Temporary file holding the merged .dockerconfigjson on the utility VM.
+registry_auth_tmp_file: /tmp/pull-secret-merged.json
+
+# Wait for the machine config pools to settle after updating the secret.
+registry_auth_wait_mcp: true
+registry_auth_mcp_retries: 60
+registry_auth_mcp_delay: 10

@@ -230,6 +230,56 @@ re-applying the staging one.
 otherwise it is a no-op. Renewal is manual, so schedule the target (e.g. a
 weekly cron) if you want it hands-off.
 
+## Additional container registries
+
+Stage `10c` merges extra registry credentials into the cluster-wide pull
+secret (`pull-secret` in namespace `openshift-config`) of an already
+installed cluster. It is skipped unless `registry_auths` is defined.
+
+The installation pull secret (`files/pull-secret.txt`) is **not** touched --
+that file only feeds `cephadm`, and the cluster secret is authoritative once
+the cluster is up.
+
+Add the credentials to `vault.yml`:
+
+```yaml
+registry_auths:
+  - registry: "quay.io/asalvati"
+    username: "asalvati+ocp"
+    password: "<robot token>"
+  - registry: "registry.gitlab.com"
+    username: "myuser"
+    password: "<token>"
+    email: "me@example.com"   # optional, defaults to ""
+```
+
+The `registry` key may be a host (`quay.io`) or a namespaced path
+(`quay.io/asalvati`) -- CRI-O picks the most specific match, so a namespaced
+entry lets you use a scoped robot account without granting cluster-wide
+access to that host. Ansible builds the base64 `auth` value from
+`username:password`; never paste a pre-encoded blob.
+
+```bash
+make vault-decrypt        # edit vault.yml, add registry_auths
+make vault-encrypt
+make configure-registries
+```
+
+The role is **additive and idempotent**: existing entries (`registry.redhat.io`,
+`cloud.openshift.com`, ...) are preserved, and re-running with no changes
+reports nothing changed. Removing an entry from `registry_auths` does **not**
+remove it from the cluster -- delete it by hand with `oc set data` (or
+`oc extract`/`oc set data`) if you need that.
+
+The Machine Config Operator propagates the new secret to
+`/var/lib/kubelet/config.json` on every node. Since OCP 4.7 this happens
+**without draining or rebooting nodes**. Verify with:
+
+```bash
+oc get secret pull-secret -n openshift-config -o json \
+  | jq -r '.data[".dockerconfigjson"]' | base64 -d | jq '.auths | keys'
+```
+
 ## Makefile targets
 
 | Target | Description |
@@ -252,6 +302,7 @@ weekly cron) if you want it hands-off.
 | `make configure-odf` | Install ODF with external Ceph storage |
 | `make configure-htpasswd` | Configure HTPasswd identity provider with users |
 | `make configure-letsencrypt` | Configure valid SSL certs via Let's Encrypt (optional; needs `enable_letsencrypt`) |
+| `make configure-registries` | Add extra registries to the cluster pull secret (optional; needs `registry_auths`) |
 | `make print-hosts` | Print /etc/hosts entries for console and API access |
 | `make cleanup` | Destroy and undefine all VMs (incl. storage and OSD disks), remove golden images + discovery ISO (`cleanup_remove_images: true`), and clean up the generated SSH key pair and `~/.ssh/config` entries |
 | `make cleanup-network` | Destroy hypervisor network (libvirt NAT mode only) |
@@ -282,7 +333,8 @@ weekly cron) if you want it hands-off.
 12. **09-configure-odf** -- deploys ODF operator with external Ceph storage, enables odf-console plugin
 13. **10-configure-htpasswd** -- configures HTPasswd identity provider (admin, reader, test01-03) with ClusterRoleBindings
 14. **10b-configure-letsencrypt** -- *optional* (skipped unless `enable_letsencrypt`): obtains a valid wildcard cert for `*.apps.<domain>` via Let's Encrypt DNS-01 over DuckDNS and applies it to the default IngressController
-15. **11-print-hosts** -- prints the `/etc/hosts` entries needed to reach the console and API (hypervisor public IP in NAT+port-forwarding mode, VIPs in bridge mode)
+15. **10c-configure-registries** -- *optional* (skipped unless `registry_auths` is set): merges extra registry credentials into the cluster-wide pull secret
+16. **11-print-hosts** -- prints the `/etc/hosts` entries needed to reach the console and API (hypervisor public IP in NAT+port-forwarding mode, VIPs in bridge mode)
 
 ## Secrets
 
@@ -300,6 +352,7 @@ Variables in vault.yml:
 - `rh_org_id` -- Red Hat organization ID
 - `htpasswd_admin_password` -- password for HTPasswd users (generate with `openssl rand -hex 30`)
 - `duckdns_token` -- *optional*, only for the Let's Encrypt stage ([duckdns.org](https://www.duckdns.org) token)
+- `registry_auths` -- *optional*, extra registry credentials for the cluster pull secret (see below)
 
 Never commit vault files or SSH keys.
 

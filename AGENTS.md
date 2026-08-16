@@ -63,7 +63,9 @@ explicitly via `make prepare-network`.
 10. **10** -- configure HTPasswd identity provider
 11. **10b** -- configure valid SSL certs via Let's Encrypt
     (DNS-01 over DuckDNS); skipped unless `enable_letsencrypt`
-12. **11** -- print /etc/hosts entries for console/API access
+12. **10c** -- merge extra registry credentials into the cluster
+    pull secret; skipped unless `registry_auths` is set
+13. **11** -- print /etc/hosts entries for console/API access
 
 ### Network modes
 
