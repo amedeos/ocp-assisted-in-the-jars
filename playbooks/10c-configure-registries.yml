@@ -1,0 +1,9 @@
+---
+- name: Add additional registries to the cluster pull secret
+  hosts: utility_vms
+  become: true
+  gather_facts: false
+  tags: [registries]
+  roles:
+    - role: registry_auth
+      when: registry_auths | default([]) | length > 0

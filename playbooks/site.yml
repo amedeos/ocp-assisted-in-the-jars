@@ -55,6 +55,10 @@
   ansible.builtin.import_playbook: 10b-configure-letsencrypt.yml
   tags: [letsencrypt]
 
+- name: Add additional registries to the cluster pull secret
+  ansible.builtin.import_playbook: 10c-configure-registries.yml
+  tags: [configure-registries]
+
 - name: Print /etc/hosts entries for console and API access
   ansible.builtin.import_playbook: 11-print-hosts.yml
   tags: [print-hosts]
