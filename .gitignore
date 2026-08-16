@@ -29,6 +29,7 @@ inventory/*-vars.yml
 
 # Ansible artifacts
 *.retry
+.ansible/
 
 # Generated host files
 hosts-utility*
