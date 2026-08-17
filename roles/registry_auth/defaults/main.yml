@@ -12,3 +12,7 @@ registry_auth_tmp_file: /tmp/pull-secret-merged.json
 registry_auth_wait_mcp: true
 registry_auth_mcp_retries: 60
 registry_auth_mcp_delay: 10
+
+# Per-request timeout, in seconds, for the registry probes performed by
+# tasks/verify.yml (make verify-registries).
+registry_auth_verify_timeout: 20

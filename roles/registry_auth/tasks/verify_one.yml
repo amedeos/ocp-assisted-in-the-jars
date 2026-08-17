@@ -1,0 +1,149 @@
+---
+# Verifies a single `registry_auths` entry, provided as `registry_auth_entry`
+# by the loop in verify.yml. Appends one result dict to
+# `registry_auth_verify_results`; nothing here fails the play, so one broken
+# registry never hides the state of the others.
+
+# Entries may be namespaced (quay.io/asalvati): the token endpoint lives on
+# the host, so strip anything after the first slash.
+- name: Derive the registry host for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_host: "{{ registry_auth_entry.registry.split('/')[0] }}"
+
+- name: Build the expected auth value for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_expected_auth: >-
+      {{ (registry_auth_entry.username ~ ':' ~ registry_auth_entry.password) | b64encode }}
+    registry_auth_cluster_entry: >-
+      {{ registry_auth_current.auths | default({})
+         | ansible.builtin.dict2items
+         | selectattr('key', 'eq', registry_auth_entry.registry)
+         | map(attribute='value') | first | default({}, true) }}
+  no_log: true
+
+- name: Compare the cluster entry with the vault for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_in_secret: "{{ registry_auth_cluster_entry | length > 0 }}"
+    registry_auth_auth_matches: >-
+      {{ registry_auth_cluster_entry.get('auth', '') == registry_auth_expected_auth }}
+
+- name: Probe the registry v2 API of {{ registry_auth_entry.registry }}
+  ansible.builtin.uri:
+    url: "https://{{ registry_auth_host }}/v2/"
+    method: GET
+    status_code: [200, 401, 403]
+    timeout: "{{ registry_auth_verify_timeout }}"
+  register: registry_auth_v2_probe
+  failed_when: false
+  check_mode: false
+
+# Standard Docker registry v2 token discovery: an unauthenticated /v2/ answers
+# 401 with `Www-Authenticate: Bearer realm="...",service="..."`. The uri module
+# exposes response headers lowercased with dashes turned into underscores.
+- name: Extract the token realm for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_realm: >-
+      {{ (registry_auth_www_auth | regex_search('realm="([^"]+)"', '\1') or ['']) | first }}
+    registry_auth_service: >-
+      {{ (registry_auth_www_auth | regex_search('service="([^"]+)"', '\1') or ['']) | first }}
+  vars:
+    registry_auth_www_auth: "{{ registry_auth_v2_probe.www_authenticate | default('') }}"
+
+# No scope is requested unless the entry names a `test_repository`: a
+# namespaced entry does not identify a repository, so the unscoped request is
+# the only thing that can be checked -- and it answers exactly the question
+# "are this username and password accepted by the registry".
+- name: Request a bearer token from {{ registry_auth_entry.registry }}
+  ansible.builtin.uri:
+    url: "{{ registry_auth_realm }}?service={{ registry_auth_service | urlencode }}{{ registry_auth_scope_param }}"
+    method: GET
+    url_username: "{{ registry_auth_entry.username }}"
+    url_password: "{{ registry_auth_entry.password }}"
+    force_basic_auth: true
+    status_code: [200, 401, 403]
+    timeout: "{{ registry_auth_verify_timeout }}"
+  register: registry_auth_token_resp
+  failed_when: false
+  check_mode: false
+  no_log: true
+  when: registry_auth_realm | length > 0
+  vars:
+    registry_auth_scope_param: >-
+      {{ ('&scope=repository:' ~ registry_auth_entry.test_repository ~ ':pull')
+         if registry_auth_entry.test_repository | default('') else '' }}
+
+# Fallback for registries that take basic auth on /v2/ directly and advertise
+# no token realm.
+- name: Authenticate directly against the v2 API of {{ registry_auth_entry.registry }}
+  ansible.builtin.uri:
+    url: "https://{{ registry_auth_host }}/v2/"
+    method: GET
+    url_username: "{{ registry_auth_entry.username }}"
+    url_password: "{{ registry_auth_entry.password }}"
+    force_basic_auth: true
+    status_code: [200, 401, 403]
+    timeout: "{{ registry_auth_verify_timeout }}"
+  register: registry_auth_basic_resp
+  failed_when: false
+  check_mode: false
+  no_log: true
+  when: registry_auth_realm | length == 0
+
+- name: Classify the credential check for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_cred_http: >-
+      {{ (registry_auth_token_resp.status | default(0))
+         if registry_auth_realm | length > 0
+         else (registry_auth_basic_resp.status | default(0)) }}
+
+- name: Describe the credential check for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_cred_status: >-
+      {{ 'ok' if registry_auth_cred_http | int == 200
+         else ('rejected' if registry_auth_cred_http | int in [401, 403]
+               else 'unknown (HTTP ' ~ registry_auth_cred_http ~ ')') }}
+
+# The token is a JWT whose payload lists what the registry actually granted.
+# Sliced rather than indexed so an opaque (non-JWT) token cannot raise.
+- name: Decode the granted access for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_granted: >-
+      {{ ((registry_auth_payload | b64decode | from_json).access | default([]))
+         if registry_auth_payload_raw | length > 0 else [] }}
+  vars:
+    registry_auth_jwt: "{{ (registry_auth_token_resp.json | default({})).token | default('') }}"
+    registry_auth_payload_raw: "{{ registry_auth_jwt.split('.')[1:2] | join('') }}"
+    registry_auth_payload: >-
+      {{ registry_auth_payload_raw | replace('-', '+') | replace('_', '/')
+         ~ '=' * ((4 - registry_auth_payload_raw | length % 4) % 4) }}
+
+- name: Check the granted pull access for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_pull_granted: >-
+      {{ registry_auth_granted
+         | selectattr('type', 'eq', 'repository')
+         | selectattr('name', 'eq', registry_auth_entry.test_repository | default(''))
+         | selectattr('actions', 'contains', 'pull')
+         | list | length > 0 }}
+
+- name: Record the verification result for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_verify_results: >-
+      {{ registry_auth_verify_results | default([]) + [{
+           'registry': registry_auth_entry.registry,
+           'in_secret': registry_auth_in_secret,
+           'vault_in_sync': registry_auth_auth_matches,
+           'credentials': registry_auth_cred_status | trim,
+           'test_repository': registry_auth_entry.test_repository | default(''),
+           'pull_granted': registry_auth_pull_granted,
+           'ok': registry_auth_entry_ok
+         }] }}
+  vars:
+    # Every operand is already a real boolean or int: the facts above are
+    # single-expression templates, so Ansible preserves their type.
+    registry_auth_entry_ok: >-
+      {{ registry_auth_in_secret
+         and registry_auth_auth_matches
+         and registry_auth_cred_http | int == 200
+         and (registry_auth_pull_granted
+              if registry_auth_entry.test_repository | default('') else true) }}

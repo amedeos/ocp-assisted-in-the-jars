@@ -1,5 +1,5 @@
 .PHONY: help deploy preflight ssh-key ssh-config create-utility create-vms configure-utility configure-ceph \
-        boot-control-planes monitor-installation post-install configure-odf configure-htpasswd configure-letsencrypt configure-registries print-hosts cleanup startup shutdown lint check \
+        boot-control-planes monitor-installation post-install configure-odf configure-htpasswd configure-letsencrypt configure-registries verify-registries print-hosts cleanup startup shutdown lint check \
         prepare-hypervisor prepare-network cleanup-network \
         vault-edit vault-encrypt vault-decrypt \
         pull-secret-encrypt pull-secret-decrypt collections
@@ -85,6 +85,9 @@ configure-letsencrypt: ## Configure valid SSL certs via Let's Encrypt (needs ena
 
 configure-registries: ## Add extra registries to the cluster pull secret (needs registry_auths)
 	$(ANSIBLE_CMD) playbooks/10c-configure-registries.yml
+
+verify-registries: ## Test the configured registry credentials (read-only)
+	$(ANSIBLE_CMD) playbooks/verify-registries.yml
 
 print-hosts: ## Print /etc/hosts entries for console and API access
 	$(ANSIBLE_CMD) playbooks/11-print-hosts.yml

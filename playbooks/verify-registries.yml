@@ -1,0 +1,16 @@
+---
+# Standalone diagnostic, deliberately unnumbered and not imported by site.yml:
+# it needs egress from the utility VM to third-party registries, and
+# `make deploy` must not depend on that.
+- name: Verify the additional registry credentials
+  hosts: utility_vms
+  become: true
+  gather_facts: false
+  tags: [verify-registries]
+  tasks:
+    - name: Verify the registries configured in registry_auths
+      ansible.builtin.include_role:
+        name: registry_auth
+        # tasks_from needs include_role; the `roles:` keyword cannot select a
+        # task file, which is why this playbook does not mirror 10c.
+        tasks_from: verify

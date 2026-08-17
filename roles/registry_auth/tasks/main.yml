@@ -45,25 +45,33 @@
          | b64decode | from_json }}
   no_log: true
 
+# `email` is a legacy Docker field that containers/image (and therefore
+# CRI-O) does not even parse, so it is emitted only when the user asks for
+# it -- matching the auth-only shape of the entries the installer writes.
 - name: Build the auth entries for the additional registries
   ansible.builtin.set_fact:
     registry_auth_entries: >-
       {{ registry_auth_entries | default({}) | combine({
-           item.registry: {
-             'auth': (item.username ~ ':' ~ item.password) | b64encode,
-             'email': item.email | default('')
-           }
+           item.registry: {'auth': (item.username ~ ':' ~ item.password) | b64encode}
+             | combine({'email': item.email} if item.email | default('') else {})
          }) }}
   loop: "{{ registry_auth_registries }}"
   loop_control:
     label: "{{ item.registry }}"
   no_log: true
 
+# Both combines are non-recursive on purpose: registries absent from
+# registry_auths keep their entry untouched (the role stays additive), while
+# a configured registry's entry is replaced wholesale so the vault stays
+# authoritative for it -- a recursive merge would keep stale keys such as an
+# `email` that is no longer emitted.
 - name: Merge the additional registries into the pull secret
   ansible.builtin.set_fact:
     registry_auth_merged: >-
-      {{ registry_auth_current
-         | combine({'auths': registry_auth_entries}, recursive=True) }}
+      {{ registry_auth_current | combine({
+           'auths': registry_auth_current.auths | default({})
+                    | combine(registry_auth_entries)
+         }) }}
   no_log: true
 
 - name: Update the global pull secret
