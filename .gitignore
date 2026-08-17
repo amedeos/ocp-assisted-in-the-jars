@@ -31,6 +31,9 @@ inventory/*-vars.yml
 *.retry
 .ansible/
 
+# Claude Code local state (CLAUDE.md itself is tracked)
+.claude/
+
 # Generated host files
 hosts-utility*
 hosts-ceph*
