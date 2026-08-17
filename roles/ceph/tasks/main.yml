@@ -14,3 +14,9 @@
 
 - name: Configure OSDs and storage pool
   ansible.builtin.include_tasks: osd.yml
+
+- name: Configure CephFS filesystem for RWX volumes
+  # After osd.yml: the CephFS pools reuse the replicated_ssd CRUSH rule it
+  # creates, and the MDS needs the OSDs up.
+  ansible.builtin.include_tasks: cephfs.yml
+  when: enable_cephfs | bool

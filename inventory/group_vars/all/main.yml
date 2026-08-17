@@ -94,6 +94,37 @@ ceph_config:
   pg_num: 128
   dashboard_enabled: false
 
+# CephFS backing the RWX StorageClass (ocs-external-storagecluster-cephfs).
+# Purely additive: the RBD StorageClass stays the cluster default, and
+# NooBaa/OBC are untouched. Set to false to skip the filesystem, the MDS
+# and the CephFS entries in the ODF external-cluster secret.
+enable_cephfs: true
+
+# Lives here rather than in the roles' defaults because two plays on two
+# different hosts read it: the ceph role on the ceph VM creates the
+# filesystem, the odf role on the utility VM renders it into the ODF
+# external-cluster secret.
+ceph_cephfs:
+  fs_name: openshift-fs
+  metadata_pool: openshift-fs-metadata
+  data_pool: openshift-fs-data
+  # 32 is also the default pg_num_min, so the autoscaler leaves these
+  # alone. With the 128-PG openshift-pool already present this stays well
+  # under mon_max_pg_per_osd (250) on the three OSDs.
+  metadata_pg_num: 32
+  data_pg_num: 32
+  # ceph-csi no longer creates its own subvolume group, and the upstream
+  # exporter script (which would) is not used here -- so the ceph role
+  # creates it. The name must match ceph-csi's defaultCsiSubvolumeGroup.
+  subvolume_group: csi
+  # One MDS only. A second, colocated standby would just double MDS memory
+  # on a 16G VM; standby_count_wanted 0 silences MDS_INSUFFICIENT_STANDBY,
+  # which would otherwise pin the cluster at HEALTH_WARN and hard-fail the
+  # pre-shutdown health gate in playbooks/shutdown.yml.
+  mds_count: 1
+  # Default is 4 GiB, too much on a VM shared with three OSDs.
+  mds_cache_memory_limit: 1073741824
+
 # How cluster commands are invoked on the ceph VM.
 #
 # Do NOT use the host `ceph` binary. cephadm bootstraps from the mutable

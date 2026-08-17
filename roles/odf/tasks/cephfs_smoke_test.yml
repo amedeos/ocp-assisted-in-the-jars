@@ -1,0 +1,52 @@
+---
+# End-to-end proof that the CephFS CSI caps and the "csi" subvolume group are
+# right: provision a ReadWriteMany PVC, wait for it to bind, then clean up.
+# A wrong osd cap tag or a missing subvolume group only surfaces here -- the
+# StorageClass itself appears regardless.
+#
+# Opt-in via odf_cephfs_smoke_test because it writes to the cluster.
+
+- name: Create the smoke-test namespace
+  ansible.builtin.command:
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} create namespace {{ odf_cephfs_smoke_namespace }}"
+  register: odf_cephfs_smoke_ns
+  changed_when: "'created' in odf_cephfs_smoke_ns.stdout"
+  failed_when: >-
+    odf_cephfs_smoke_ns.rc != 0 and
+    'already exists' not in odf_cephfs_smoke_ns.stderr
+
+- name: Run the smoke test
+  block:
+    - name: Apply the ReadWriteMany PVC
+      ansible.builtin.command:
+        cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} apply -f -"
+        stdin: "{{ lookup('template', 'cephfs-smoke-pvc.yml.j2') }}"
+      register: odf_cephfs_smoke_pvc
+      changed_when: >-
+        'created' in odf_cephfs_smoke_pvc.stdout or
+        'configured' in odf_cephfs_smoke_pvc.stdout
+
+    - name: Wait for the PVC to be Bound
+      ansible.builtin.command:
+        cmd: >-
+          oc --kubeconfig {{ odf_kubeconfig_path }}
+          get pvc {{ odf_cephfs_smoke_pvc_name }}
+          -n {{ odf_cephfs_smoke_namespace }}
+          -o jsonpath='{.status.phase}'
+      register: odf_cephfs_smoke_phase
+      until: odf_cephfs_smoke_phase.stdout == 'Bound'
+      retries: 20
+      delay: 15
+      changed_when: false
+
+  always:
+    - name: Remove the smoke-test namespace
+      ansible.builtin.command:
+        cmd: >-
+          oc --kubeconfig {{ odf_kubeconfig_path }}
+          delete namespace {{ odf_cephfs_smoke_namespace }} --wait=false
+      register: odf_cephfs_smoke_cleanup
+      changed_when: "'deleted' in odf_cephfs_smoke_cleanup.stdout"
+      failed_when: >-
+        odf_cephfs_smoke_cleanup.rc != 0 and
+        'NotFound' not in odf_cephfs_smoke_cleanup.stderr

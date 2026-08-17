@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ odf_cephfs_smoke_pvc_name }}
+  namespace: {{ odf_cephfs_smoke_namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {{ odf_cephfs_storage_class }}
+  resources:
+    requests:
+      storage: {{ odf_cephfs_smoke_pvc_size }}

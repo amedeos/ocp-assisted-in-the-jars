@@ -5,6 +5,13 @@ ceph_osd_devices:
   - /dev/vdd
 ceph_client_name: client.openshift
 
+# CephX entities for the CephFS CSI driver. These names are not free choice:
+# the userID ODF puts in the CSI secret is the entity minus its "client."
+# prefix, and ceph-csi re-prefixes it. Renaming them means diverging from
+# every upstream doc and troubleshooting article.
+ceph_cephfs_provisioner_client: client.csi-cephfs-provisioner
+ceph_cephfs_node_client: client.csi-cephfs-node
+
 # Issue the cephx keys ODF consumes (client.admin, client.openshift) with the
 # AES-128 cipher instead of the AES-256 the current rhceph-9 image defaults to.
 # ODF's bundled Ceph client is an older build that cannot parse AES-256 keys,

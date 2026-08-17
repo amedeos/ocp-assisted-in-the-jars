@@ -42,12 +42,35 @@
   delegate_to: ceph
   no_log: true
 
+- name: Get CephX key for the CephFS CSI provisioner
+  ansible.builtin.command: "{{ ceph_cmd }} auth get-key {{ odf_cephfs_provisioner_client }}"
+  register: odf_cephfs_provisioner_key_result
+  changed_when: false
+  delegate_to: ceph
+  no_log: true
+  when: enable_cephfs | bool
+
+- name: Get CephX key for the CephFS CSI node plugin
+  ansible.builtin.command: "{{ ceph_cmd }} auth get-key {{ odf_cephfs_node_client }}"
+  register: odf_cephfs_node_key_result
+  changed_when: false
+  delegate_to: ceph
+  no_log: true
+  when: enable_cephfs | bool
+
 - name: Set Ceph connection facts
   ansible.builtin.set_fact:
     odf_ceph_fsid: "{{ odf_ceph_fsid_result.stdout }}"
     odf_ceph_key: "{{ odf_ceph_key_result.stdout }}"
     odf_ceph_admin_key: "{{ odf_ceph_admin_key_result.stdout }}"
     odf_ceph_mon_ip: "{{ (cluster_nodes | selectattr('role', 'eq', 'ceph') | first).ip }}"
+
+- name: Set CephFS connection facts
+  ansible.builtin.set_fact:
+    odf_cephfs_provisioner_key: "{{ odf_cephfs_provisioner_key_result.stdout }}"
+    odf_cephfs_node_key: "{{ odf_cephfs_node_key_result.stdout }}"
+  when: enable_cephfs | bool
+  no_log: true
 
 - name: Create openshift-storage namespace
   ansible.builtin.command:
@@ -82,6 +105,21 @@
   delay: 15
   changed_when: false
 
+- name: Apply Ceph CephFS secrets
+  # Applied before the connection secret, unlike the RBD ones: ocs-operator
+  # creates these same Secrets from the JSON as type Opaque, and a Secret's
+  # type is immutable, so on an already-reconciled cluster applying them
+  # afterwards would fail with "field is immutable".
+  ansible.builtin.command:
+    cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} apply -f -"
+    stdin: "{{ lookup('template', 'ceph-cephfs-secret.yml.j2') }}"
+  register: odf_cephfs_secret_apply
+  changed_when: >-
+    'created' in odf_cephfs_secret_apply.stdout or
+    'configured' in odf_cephfs_secret_apply.stdout
+  when: enable_cephfs | bool
+  no_log: true
+
 - name: Apply Ceph connection secret
   ansible.builtin.command:
     cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} apply -f -"
@@ -114,6 +152,43 @@
   register: odf_sc_apply
   changed_when: "'created' in odf_sc_apply.stdout or 'configured' in odf_sc_apply.stdout"
 
+- name: Compute the external-details revision
+  ansible.builtin.set_fact:
+    odf_details_revision: "{{ lookup('template', 'ceph-connection.yml.j2') | hash('sha1') }}"
+
+- name: Get the recorded external-details revision
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ odf_kubeconfig_path }}
+      get storagecluster ocs-external-storagecluster
+      -n {{ odf_namespace }}
+      -o jsonpath="{.metadata.annotations['{{ odf_details_revision_annotation }}']}"
+  register: odf_sc_current_revision
+  changed_when: false
+  failed_when: false
+
+- name: Trigger a StorageCluster reconcile for the external details
+  # ocs-operator re-reads rook-ceph-external-cluster-details on every
+  # reconcile but does not watch it: its Owns(&corev1.Secret{}) is filtered
+  # by GenerationChangedPredicate, and Secrets have no generation. The
+  # StorageCluster's own predicate does include MetadataChangedPredicate, so
+  # bumping an annotation is a reliable trigger. Without this a changed
+  # secret would only take effect at the 10h resync. Hashing the rendered
+  # template keeps the task idempotent, and ungating it means the same
+  # applies the day the RBD side of the secret changes.
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ odf_kubeconfig_path }}
+      annotate storagecluster ocs-external-storagecluster
+      -n {{ odf_namespace }}
+      {{ odf_details_revision_annotation }}={{ odf_details_revision }}
+      --overwrite
+  register: odf_sc_reconcile
+  # "annotate --overwrite" reports "annotated" even when the value is
+  # unchanged, so gate on the stored value instead of on its output.
+  when: odf_sc_current_revision.stdout | default('') != odf_details_revision
+  changed_when: true
+
 - name: Wait for StorageCluster to be ready
   ansible.builtin.command:
     cmd: >-
@@ -127,7 +202,19 @@
   delay: 15
   changed_when: false
 
+- name: Get the enabled console plugins
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ odf_kubeconfig_path }}
+      get console.operator.openshift.io cluster
+      -o jsonpath='{.spec.plugins}'
+  register: odf_console_plugins
+  changed_when: false
+
 - name: Enable ODF console plugin
+  # Guarded on the current list: "add /spec/plugins/-" appends
+  # unconditionally, so an unguarded re-run grows a list of duplicate
+  # odf-console entries.
   ansible.builtin.command:
     cmd: >-
       oc --kubeconfig {{ odf_kubeconfig_path }}
@@ -135,6 +222,7 @@
       --type json
       --patch '[{"op": "add", "path": "/spec/plugins/-", "value": "odf-console"}]'
   register: odf_console_plugin
+  when: "'odf-console' not in (odf_console_plugins.stdout | default('[]', true) | from_json)"
   changed_when: "'patched' in odf_console_plugin.stdout"
   failed_when: >-
     odf_console_plugin.rc != 0 and
@@ -149,6 +237,38 @@
       --overwrite
   register: odf_default_sc
   changed_when: "'annotated' in odf_default_sc.stdout | default('')"
+
+- name: Wait for the CephFS StorageClass to appear
+  # Created by ocs-operator from the "cephfs" entry in the external-cluster
+  # secret. It carries no is-default-class annotation, so it does not
+  # contend with the RBD class annotated above.
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ odf_kubeconfig_path }}
+      get storageclass {{ odf_cephfs_storage_class }}
+  register: odf_cephfs_sc_check
+  until: odf_cephfs_sc_check.rc == 0
+  retries: 40
+  delay: 15
+  changed_when: false
+  failed_when: false
+  when: enable_cephfs | bool
+
+- name: Fail if the CephFS StorageClass never appeared
+  ansible.builtin.fail:
+    msg: >-
+      {{ odf_cephfs_storage_class }} was not created. Check that the "cephfs"
+      entry reached the rook-ceph-external-cluster-details secret, and read
+      the ocs-operator log in {{ odf_namespace }}.
+  when:
+    - enable_cephfs | bool
+    - odf_cephfs_sc_check.rc | default(1) != 0
+
+- name: Run the CephFS RWX smoke test
+  ansible.builtin.include_tasks: cephfs_smoke_test.yml
+  when:
+    - enable_cephfs | bool
+    - odf_cephfs_smoke_test | bool
 
 - name: Display StorageClasses
   ansible.builtin.command:
