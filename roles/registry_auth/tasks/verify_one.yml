@@ -117,14 +117,41 @@
       {{ registry_auth_payload_raw | replace('-', '+') | replace('_', '/')
          ~ '=' * ((4 - registry_auth_payload_raw | length % 4) % 4) }}
 
-- name: Check the granted pull access for {{ registry_auth_entry.registry }}
+- name: Check the granted pull scope for {{ registry_auth_entry.registry }}
   ansible.builtin.set_fact:
-    registry_auth_pull_granted: >-
+    registry_auth_pull_scoped: >-
       {{ registry_auth_granted
          | selectattr('type', 'eq', 'repository')
          | selectattr('name', 'eq', registry_auth_entry.test_repository | default(''))
          | selectattr('actions', 'contains', 'pull')
          | list | length > 0 }}
+
+# The granted scope alone is not proof: quay hands out a pull scope for names
+# that do not exist (a test_repository carrying the registry host by mistake
+# gets one), so confirm the repository can actually be read. tags/list is the
+# lightest v2 endpoint that requires the pull scope on a real repository.
+- name: Confirm read access to the test repository of {{ registry_auth_entry.registry }}
+  ansible.builtin.uri:
+    url: "https://{{ registry_auth_host }}/v2/{{ registry_auth_entry.test_repository }}/tags/list"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ (registry_auth_token_resp.json | default({})).token | default('') }}"
+    status_code: [200, 401, 403, 404]
+    timeout: "{{ registry_auth_verify_timeout }}"
+  register: registry_auth_tags_resp
+  failed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - registry_auth_entry.test_repository | default('') | length > 0
+    - registry_auth_pull_scoped
+
+- name: Check the granted pull access for {{ registry_auth_entry.registry }}
+  ansible.builtin.set_fact:
+    registry_auth_read_http: "{{ registry_auth_tags_resp.status | default(0) }}"
+    registry_auth_pull_granted: >-
+      {{ registry_auth_pull_scoped
+         and registry_auth_tags_resp.status | default(0) | int == 200 }}
 
 - name: Record the verification result for {{ registry_auth_entry.registry }}
   ansible.builtin.set_fact:
@@ -136,6 +163,7 @@
            'credentials': registry_auth_cred_status | trim,
            'test_repository': registry_auth_entry.test_repository | default(''),
            'pull_granted': registry_auth_pull_granted,
+           'read_http': registry_auth_read_http | int,
            'ok': registry_auth_entry_ok
          }] }}
   vars:

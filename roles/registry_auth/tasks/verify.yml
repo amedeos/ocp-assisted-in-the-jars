@@ -65,7 +65,8 @@
       {{ item.registry }}: in-secret={{ item.in_secret }}
       vault-in-sync={{ item.vault_in_sync }}
       credentials={{ item.credentials }}
-      {{ ('pull-granted=' ~ item.pull_granted ~ ' on ' ~ item.test_repository)
+      {{ ('pull-granted=' ~ item.pull_granted ~ ' on ' ~ item.test_repository
+          ~ ' (tags/list HTTP ' ~ item.read_http ~ ')')
          if item.test_repository else '(no test_repository set)' }}
   loop: "{{ registry_auth_verify_results }}"
   loop_control:
@@ -84,8 +85,10 @@
       in-secret=false means `make configure-registries` was never run;
       vault-in-sync=false means the vault changed since it last ran;
       credentials=rejected means the registry refused the username/password;
-      pull-granted=false means the account authenticates but has no pull
-      access to test_repository.
+      pull-granted=false means the account authenticates but cannot read
+      test_repository -- check that value first, it is a repository name
+      with no tag and no registry host (asalvati/myapp, not
+      quay.io/asalvati/myapp:latest).
     success_msg: >-
       All {{ registry_auth_verify_results | length }} configured registries are
       present in the cluster pull secret, match the vault, and authenticate.

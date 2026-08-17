@@ -48,7 +48,9 @@ htpasswd_admin_password: "CHANGE_ME"
 # `email` is optional and is omitted from the secret when unset.
 # `test_repository` is optional and only used by `make verify-registries`:
 # it names a repository the account must be able to pull, which turns the
-# check into a real end-to-end credential test.
+# check into a real end-to-end credential test. It is a bare repository
+# name -- no tag and no registry host, so "asalvati/myapp" and never
+# "quay.io/asalvati/myapp" or "asalvati/myapp:latest".
 # registry_auths:
 #   - registry: "quay.io/asalvati"
 #     username: "asalvati+ocp"

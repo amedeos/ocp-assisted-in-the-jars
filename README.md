@@ -296,7 +296,22 @@ For every entry in `registry_auths` it reports whether the registry is present
 in the cluster pull secret, whether that entry still matches the vault, and
 whether the registry's own token endpoint accepts the username and password.
 Add `test_repository` to an entry and it also asserts the account was granted
-`pull` on that repository. Passwords never appear in the output.
+`pull` on that repository *and* can really read it. Passwords never appear in
+the output.
+
+`test_repository` is a bare repository name -- **no tag and no registry host**,
+since the registry comes from `registry:` and the value ends up in the OAuth
+scope `repository:<name>:pull`, where a tag is meaningless:
+
+```yaml
+test_repository: "asalvati/myapp"             # correct
+test_repository: "asalvati/myapp:latest"      # rejected: INVALID_REQUEST
+test_repository: "quay.io/asalvati/myapp"     # wrong: a different repository
+```
+
+The last one matters: quay hands out a `pull` scope even for repository names
+that do not exist, so the scope alone would report success. That is why the
+check also reads `tags/list` and requires HTTP 200.
 
 If the credentials check out, read the CRI-O error on the pod carefully:
 
