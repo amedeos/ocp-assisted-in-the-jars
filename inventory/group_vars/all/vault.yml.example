@@ -45,11 +45,15 @@ htpasswd_admin_password: "CHANGE_ME"
 # The `registry` key may be a host (quay.io) or a namespaced path
 # (quay.io/asalvati): CRI-O uses the most specific match.
 # For Quay use a robot account (Account Settings -> Robot Accounts).
-# `email` is optional and defaults to an empty string.
+# `email` is optional and is omitted from the secret when unset.
+# `test_repository` is optional and only used by `make verify-registries`:
+# it names a repository the account must be able to pull, which turns the
+# check into a real end-to-end credential test.
 # registry_auths:
 #   - registry: "quay.io/asalvati"
 #     username: "asalvati+ocp"
 #     password: "CHANGE_ME"
+#     test_repository: "asalvati/CHANGE_ME"
 #   - registry: "registry.gitlab.com"
 #     username: "CHANGE_ME"
 #     password: "CHANGE_ME"

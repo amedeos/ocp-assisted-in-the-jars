@@ -1,0 +1,94 @@
+---
+# Read-only verification of the registries listed in `registry_auths`. Each
+# entry is checked against the cluster pull secret and then against the
+# registry's own token endpoint, so an image-pull failure can be pinned on the
+# credentials -- or ruled out -- without decoding secrets by hand.
+# Run via `make verify-registries`; nothing here writes to the cluster.
+
+- name: Assert that additional registries are configured
+  ansible.builtin.assert:
+    that:
+      - registry_auth_registries | length > 0
+    fail_msg: >-
+      registry_auths is empty or undefined, so there is nothing to verify.
+      Add the credentials to the vault first (see the README).
+
+# no_log hides the stdout (it is the pull secret), so the exit code is
+# checked separately to keep the failure message readable.
+- name: Read the current global pull secret
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ registry_auth_kubeconfig_path }}
+      get secret pull-secret -n openshift-config -o json
+  register: registry_auth_secret_raw
+  changed_when: false
+  failed_when: false
+  # Read-only: must run in check mode too, everything below depends on it.
+  check_mode: false
+  no_log: true
+
+- name: Fail if the global pull secret cannot be read
+  ansible.builtin.fail:
+    msg: >-
+      Could not read secret pull-secret in namespace openshift-config with
+      kubeconfig {{ registry_auth_kubeconfig_path }} (oc exit code
+      {{ registry_auth_secret_raw.rc }}): {{ registry_auth_secret_raw.stderr }}
+  when: registry_auth_secret_raw.rc != 0
+
+- name: Decode the current global pull secret
+  ansible.builtin.set_fact:
+    registry_auth_current: >-
+      {{ (registry_auth_secret_raw.stdout | from_json).data['.dockerconfigjson']
+         | b64decode | from_json }}
+  no_log: true
+
+- name: Reset the accumulated verification results
+  ansible.builtin.set_fact:
+    registry_auth_verify_results: []
+
+- name: Verify each configured registry
+  ansible.builtin.include_tasks: verify_one.yml
+  loop: "{{ registry_auth_registries }}"
+  loop_control:
+    loop_var: registry_auth_entry
+    label: "{{ registry_auth_entry.registry }}"
+
+- name: Display every registry present in the cluster pull secret
+  ansible.builtin.debug:
+    msg: >-
+      Registries in openshift-config/pull-secret:
+      {{ registry_auth_current.auths | default({}) | list | sort | join(', ') }}
+
+- name: Display the verification result per registry
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.registry }}: in-secret={{ item.in_secret }}
+      vault-in-sync={{ item.vault_in_sync }}
+      credentials={{ item.credentials }}
+      {{ ('pull-granted=' ~ item.pull_granted ~ ' on ' ~ item.test_repository)
+         if item.test_repository else '(no test_repository set)' }}
+  loop: "{{ registry_auth_verify_results }}"
+  loop_control:
+    label: "{{ item.registry }}"
+
+# One assert at the end rather than one per check: every registry is reported
+# above before anything fails, and the message says which check went wrong.
+- name: Assert that every configured registry verified
+  ansible.builtin.assert:
+    that:
+      - registry_auth_verify_failures | length == 0
+    fail_msg: >-
+      {{ registry_auth_verify_failures | length }} of
+      {{ registry_auth_verify_results | length }} registries did not verify:
+      {{ registry_auth_verify_failures | map(attribute='registry') | join(', ') }}.
+      in-secret=false means `make configure-registries` was never run;
+      vault-in-sync=false means the vault changed since it last ran;
+      credentials=rejected means the registry refused the username/password;
+      pull-granted=false means the account authenticates but has no pull
+      access to test_repository.
+    success_msg: >-
+      All {{ registry_auth_verify_results | length }} configured registries are
+      present in the cluster pull secret, match the vault, and authenticate.
+  vars:
+    registry_auth_verify_failures: >-
+      {{ registry_auth_verify_results | rejectattr('ok') | list }}

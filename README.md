@@ -247,10 +247,11 @@ registry_auths:
   - registry: "quay.io/asalvati"
     username: "asalvati+ocp"
     password: "<robot token>"
+    test_repository: "asalvati/myapp"   # optional, see verify-registries
   - registry: "registry.gitlab.com"
     username: "myuser"
     password: "<token>"
-    email: "me@example.com"   # optional, defaults to ""
+    email: "me@example.com"   # optional, omitted when unset
 ```
 
 The `registry` key may be a host (`quay.io`) or a namespaced path
@@ -265,11 +266,13 @@ make vault-encrypt
 make configure-registries
 ```
 
-The role is **additive and idempotent**: existing entries (`registry.redhat.io`,
-`cloud.openshift.com`, ...) are preserved, and re-running with no changes
-reports nothing changed. Removing an entry from `registry_auths` does **not**
-remove it from the cluster -- delete it by hand with `oc set data` (or
-`oc extract`/`oc set data`) if you need that.
+The role is **additive and idempotent**: registries you do not list
+(`registry.redhat.io`, `cloud.openshift.com`, ...) are preserved untouched, and
+re-running with no changes reports nothing changed. For a registry you *do*
+list the vault is authoritative -- its entry is replaced wholesale, so a
+rotated password or a removed `email` takes effect. Removing an entry from
+`registry_auths` does **not** remove it from the cluster -- delete it by hand
+with `oc set data` (or `oc extract`/`oc set data`) if you need that.
 
 The Machine Config Operator propagates the new secret to
 `/var/lib/kubelet/config.json` on every node. Since OCP 4.7 this happens
@@ -278,6 +281,45 @@ The Machine Config Operator propagates the new secret to
 ```bash
 oc get secret pull-secret -n openshift-config -o json \
   | jq -r '.data[".dockerconfigjson"]' | base64 -d | jq '.auths | keys'
+```
+
+### Troubleshooting image pulls
+
+Start with the read-only checker -- it is the fastest way to separate "bad
+credentials" from everything else:
+
+```bash
+make verify-registries
+```
+
+For every entry in `registry_auths` it reports whether the registry is present
+in the cluster pull secret, whether that entry still matches the vault, and
+whether the registry's own token endpoint accepts the username and password.
+Add `test_repository` to an entry and it also asserts the account was granted
+`pull` on that repository. Passwords never appear in the output.
+
+If the credentials check out, read the CRI-O error on the pod carefully:
+
+- `unauthorized: access to the requested resource is not authorized` --
+  credentials or permissions.
+- `manifest unknown` -- authentication was fine; the tag or digest does not
+  exist in the registry.
+
+**CRI-O tries every auth entry that matches the image**, so a namespaced entry
+(`quay.io/asalvati`) and a host entry (`quay.io`) are both attempted and a
+single failure message can contain *both* errors concatenated. Judge the error
+that belongs to the most specific entry -- the broader entry failing with
+`unauthorized` is expected and not the problem.
+
+A `manifest unknown` shortly after a fresh push usually means an ImageStream is
+still pinned to a digest the registry has since deleted. Deployments wired to
+an ImageStream through an `image.openshift.io/triggers` annotation run a pinned
+digest, not the tag, so they keep retrying the dead digest until the next
+scheduled import. Compare and force the re-import:
+
+```bash
+oc get is <name> -n <ns> -o jsonpath='{.status.tags[*].items[0].image}{"\n"}'
+oc import-image <name>:<tag> -n <ns> --confirm
 ```
 
 ## Makefile targets
@@ -303,6 +345,7 @@ oc get secret pull-secret -n openshift-config -o json \
 | `make configure-htpasswd` | Configure HTPasswd identity provider with users |
 | `make configure-letsencrypt` | Configure valid SSL certs via Let's Encrypt (optional; needs `enable_letsencrypt`) |
 | `make configure-registries` | Add extra registries to the cluster pull secret (optional; needs `registry_auths`) |
+| `make verify-registries` | Test the configured registry credentials against each registry (read-only) |
 | `make print-hosts` | Print /etc/hosts entries for console and API access |
 | `make cleanup` | Destroy and undefine all VMs (incl. storage and OSD disks), remove golden images + discovery ISO (`cleanup_remove_images: true`), and clean up the generated SSH key pair and `~/.ssh/config` entries |
 | `make cleanup-network` | Destroy hypervisor network (libvirt NAT mode only) |
