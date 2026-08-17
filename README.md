@@ -18,7 +18,7 @@ Deploy a 3-node compact OpenShift cluster using the **Assisted Installer** on KV
    |   (Bridge mode: manual bridge for multi-hypervisor)
          |
          +-- utility         (.254) -- dnsmasq (DNS+DHCP), RHEL 10
-         +-- ceph             (.252) -- cephadm single-node, 3 OSD, RHEL 10
+         +-- ceph             (.252) -- cephadm single-node, 3 OSD, CephFS/MDS, RHEL 10
          +-- control-plane-0  (.53)  -- empty VM, boot from discovery ISO
          +-- control-plane-1  (.54)  -- empty VM, boot from discovery ISO
          +-- control-plane-2  (.55)  -- empty VM, boot from discovery ISO
@@ -183,6 +183,45 @@ vm_specs:
 ```
 
 Only include the roles you want to override; defaults for the rest come from `inventory/group_vars/all/main.yml`.
+
+## RWX volumes via CephFS
+
+The cluster gets three StorageClasses:
+
+| StorageClass | Provisioner | Access modes | |
+|---|---|---|---|
+| `ocs-external-storagecluster-ceph-rbd` | RBD | RWO | **default** |
+| `ocs-external-storagecluster-cephfs` | CephFS | RWO, **RWX** | |
+| `openshift-storage.noobaa.io` | NooBaa | object (OBC) | |
+
+CephFS is additive: it does not change the default class, and RBD and
+NooBaa/OBC are untouched. Disable it with `enable_cephfs: false` in
+extra-vars or `group_vars`, which skips the filesystem, the MDS and the
+CephFS entries in the ODF external-cluster secret.
+
+`make configure-ceph` creates two pools (`openshift-fs-metadata`,
+`openshift-fs-data`, both on the `replicated_ssd` CRUSH rule), the
+`openshift-fs` filesystem, one MDS daemon, the `csi` subvolume group and
+the two CephFS CSI cephx users. `make configure-odf` then adds the
+matching entries to `rook-ceph-external-cluster-details`, and ODF
+derives the StorageClass and deploys the CephFS CSI driver from them.
+
+Tune sizing via `ceph_cephfs` in `inventory/group_vars/all/main.yml`.
+The defaults (32 PGs per pool) keep the three OSDs well under
+`mon_max_pg_per_osd` alongside the existing 128-PG RBD pool, and match
+`pg_num_min` so the autoscaler leaves them alone.
+
+**Single-MDS trade-off.** One Ceph host means one MDS, so there is no
+standby and `standby_count_wanted` is set to `0`. Without that the
+cluster would sit permanently in `HEALTH_WARN`
+(`MDS_INSUFFICIENT_STANDBY`), and `make shutdown` refuses to run unless
+Ceph reports exactly `HEALTH_OK`. A second, colocated MDS would only
+double MDS memory on a 16 GB VM without buying real redundancy.
+
+To verify RWX end-to-end, set `odf_cephfs_smoke_test: true`: the odf role
+provisions a `ReadWriteMany` PVC, waits for it to bind and deletes it
+again. It is the only check that actually exercises the CSI caps and the
+subvolume group.
 
 ## Valid SSL certificates (optional)
 
@@ -352,11 +391,11 @@ oc import-image <name>:<tag> -n <ns> --confirm
 | `make create-utility` | Create utility VM only |
 | `make create-vms` | Create ceph and control-plane VMs |
 | `make configure-utility` | Configure dnsmasq (DNS+DHCP) |
-| `make configure-ceph` | Bootstrap Ceph with 3 OSDs |
+| `make configure-ceph` | Bootstrap Ceph with 3 OSDs, plus the CephFS filesystem and MDS when `enable_cephfs` is set (default) |
 | `make boot-control-planes` | Start control-planes from ISO (prompts for Assisted Installer setup) |
 | `make monitor-installation` | Monitor Assisted Installer and wait for cluster ready |
 | `make post-install` | Setup oc client and kubeconfig on utility VM |
-| `make configure-odf` | Install ODF with external Ceph storage |
+| `make configure-odf` | Install ODF with external Ceph storage (adds the CephFS RWX StorageClass when `enable_cephfs` is set) |
 | `make configure-htpasswd` | Configure HTPasswd identity provider with users |
 | `make configure-letsencrypt` | Configure valid SSL certs via Let's Encrypt (optional; needs `enable_letsencrypt`) |
 | `make configure-registries` | Add extra registries to the cluster pull secret (optional; needs `registry_auths`) |
@@ -384,11 +423,11 @@ oc import-image <name>:<tag> -n <ns> --confirm
 5. **04c-ssh-config** -- adds VM entries to ~/.ssh/config
 6. **05-configure-utility** -- base config (subscription, hostname, updates) + dnsmasq
 7. **04b-create-remaining-vms** -- creates ceph and control-plane VMs (empty cdrom, no ISO)
-8. **06-configure-ceph** -- base config + bootstraps Ceph, adds 3 OSDs (SSD class), creates pool
+8. **06-configure-ceph** -- base config + bootstraps Ceph, adds 3 OSDs (SSD class), creates pool, and (unless `enable_cephfs` is false) the CephFS filesystem, MDS, `csi` subvolume group and CephFS CSI users
 9. **07-boot-control-planes** -- prompts user to confirm Assisted Installer setup, inserts discovery ISO, boots control-plane VMs (skipped if API VIP already reachable)
 10. **07b-monitor-installation** -- waits for API VIP, restarts shut-off VMs without ISO, monitors kubeconfig/clusterversion/cluster operators
 11. **08-post-install** -- installs oc client, fetches kubeconfig on utility VM
-12. **09-configure-odf** -- deploys ODF operator with external Ceph storage, enables odf-console plugin
+12. **09-configure-odf** -- deploys ODF operator with external Ceph storage, enables odf-console plugin, and (unless `enable_cephfs` is false) adds the CephFS RWX StorageClass
 13. **10-configure-htpasswd** -- configures HTPasswd identity provider (admin, reader, test01-03) with ClusterRoleBindings
 14. **10b-configure-letsencrypt** -- *optional* (skipped unless `enable_letsencrypt`): obtains a valid wildcard cert for `*.apps.<domain>` via Let's Encrypt DNS-01 over DuckDNS and applies it to the default IngressController
 15. **10c-configure-registries** -- *optional* (skipped unless `registry_auths` is set): merges extra registry credentials into the cluster-wide pull secret

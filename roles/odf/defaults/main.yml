@@ -4,3 +4,23 @@ odf_catalog_source: redhat-operators
 odf_operator_name: odf-operator
 odf_ceph_client_name: client.openshift
 odf_kubeconfig_path: /root/kubeconfig-int
+
+# CephFS / RWX. Only consumed when enable_cephfs is true. The client names
+# must match the entities the ceph role creates; the StorageClass name is
+# derived by ocs-operator as "<storagecluster name>-cephfs" and cannot be
+# chosen here -- it is declared so the wait task has something to poll.
+odf_cephfs_provisioner_client: client.csi-cephfs-provisioner
+odf_cephfs_node_client: client.csi-cephfs-node
+odf_cephfs_storage_class: ocs-external-storagecluster-cephfs
+
+# Optional end-to-end check: provision a ReadWriteMany PVC on the new
+# StorageClass and delete it again. It is the only step that actually proves
+# the CSI caps and the subvolume group are right.
+# Annotation used to force a StorageCluster reconcile when the external
+# cluster details change. ocs-operator does not watch that secret.
+odf_details_revision_annotation: ocp-assisted/external-details-revision
+
+odf_cephfs_smoke_test: false
+odf_cephfs_smoke_namespace: odf-cephfs-smoke-test
+odf_cephfs_smoke_pvc_name: cephfs-rwx-smoke
+odf_cephfs_smoke_pvc_size: 1Gi

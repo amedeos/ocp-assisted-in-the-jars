@@ -1,0 +1,207 @@
+---
+# CephFS filesystem backing the ODF RWX StorageClass.
+#
+# The pools are created explicitly, before "ceph fs new", so that the
+# replicated_ssd CRUSH rule (device class ssd, failure domain osd) and an
+# explicit pg_num can be applied. "ceph fs volume create" would create them
+# with the default rule and let the autoscaler pick pg_num instead.
+
+- name: Check existing pools
+  ansible.builtin.command: "{{ ceph_cmd }} osd pool ls"
+  register: ceph_cephfs_pool_list
+  changed_when: false
+
+- name: Create CephFS pools
+  ansible.builtin.command:
+    cmd: >-
+      {{ ceph_cmd }} osd pool create {{ item.name }}
+      {{ item.pg_num }} {{ item.pg_num }} replicated replicated_ssd
+  loop:
+    - name: "{{ ceph_cephfs.metadata_pool }}"
+      pg_num: "{{ ceph_cephfs.metadata_pg_num }}"
+    - name: "{{ ceph_cephfs.data_pool }}"
+      pg_num: "{{ ceph_cephfs.data_pg_num }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in ceph_cephfs_pool_list.stdout_lines
+  changed_when: true
+
+- name: Ensure CephFS pools use the SSD CRUSH rule
+  # Belt and braces for pools created before the rule was passed inline.
+  ansible.builtin.command:
+    cmd: "{{ ceph_cmd }} osd pool set {{ item }} crush_rule replicated_ssd"
+  loop:
+    - "{{ ceph_cephfs.metadata_pool }}"
+    - "{{ ceph_cephfs.data_pool }}"
+  register: ceph_cephfs_pool_crush
+  changed_when: "'set' in ceph_cephfs_pool_crush.stdout"
+  failed_when: ceph_cephfs_pool_crush.rc != 0
+
+- name: Check existing CephFS filesystems
+  ansible.builtin.command: "{{ ceph_cmd }} fs ls -f json"
+  register: ceph_cephfs_fs_list
+  changed_when: false
+
+- name: Create the CephFS filesystem
+  # Deliberately NOT preceded by "osd pool application enable <pool> cephfs":
+  # "fs new" tags the pools with cephfs metadata=<fs> / data=<fs>, and the CSI
+  # osd caps ("allow rw tag cephfs metadata=*") match on that key/value pair.
+  # A bare application enable leaves the tag empty and the CSI user is denied.
+  ansible.builtin.command:
+    cmd: >-
+      {{ ceph_cmd }} fs new {{ ceph_cephfs.fs_name }}
+      {{ ceph_cephfs.metadata_pool }} {{ ceph_cephfs.data_pool }}
+  register: ceph_cephfs_new
+  when: >-
+    ceph_cephfs.fs_name not in
+    (ceph_cephfs_fs_list.stdout | from_json | map(attribute='name') | list)
+  changed_when: ceph_cephfs_new.rc == 0
+  failed_when: >-
+    ceph_cephfs_new.rc is defined and ceph_cephfs_new.rc != 0
+    and 'already' not in ceph_cephfs_new.stderr
+
+- name: Get CephFS map
+  ansible.builtin.command: "{{ ceph_cmd }} fs get {{ ceph_cephfs.fs_name }} -f json"
+  register: ceph_cephfs_get
+  changed_when: false
+
+- name: Disable the standby-MDS health check
+  # One host means one MDS. With the default standby_count_wanted of 1 the
+  # cluster sits permanently in HEALTH_WARN (MDS_INSUFFICIENT_STANDBY), which
+  # makes the pre-shutdown health gate hard-fail. Set before the MDS is
+  # deployed so the warning never appears in the first place.
+  ansible.builtin.command:
+    cmd: "{{ ceph_cmd }} fs set {{ ceph_cephfs.fs_name }} standby_count_wanted 0"
+  when: (ceph_cephfs_get.stdout | from_json).mdsmap.standby_count_wanted | int != 0
+  changed_when: true
+
+- name: Get current MDS cache memory limit
+  ansible.builtin.command: "{{ ceph_cmd }} config get mds mds_cache_memory_limit"
+  register: ceph_cephfs_mds_cache
+  changed_when: false
+
+- name: Cap MDS cache memory
+  ansible.builtin.command:
+    cmd: >-
+      {{ ceph_cmd }} config set mds mds_cache_memory_limit
+      {{ ceph_cephfs.mds_cache_memory_limit }}
+  when: ceph_cephfs_mds_cache.stdout | trim != ceph_cephfs.mds_cache_memory_limit | string
+  changed_when: true
+
+- name: Check existing MDS service
+  # "orch apply" reports "Scheduled ... update" on every run, so gate on the
+  # service already existing rather than on its output.
+  ansible.builtin.command: "{{ ceph_cmd }} orch ls --service-type mds -f json"
+  register: ceph_cephfs_mds_ls
+  changed_when: false
+
+- name: Deploy the MDS daemon
+  # Substring match rather than from_json: with no MDS deployed yet
+  # "orch ls" prints the plain text "No services reported" (rc 0), not an
+  # empty JSON array, so parsing it would fail on the very first run.
+  #
+  # count:N rather than "N <host>": the command module splits on whitespace,
+  # which would turn a placement of "1 ceph" into two separate arguments.
+  ansible.builtin.command:
+    cmd: >-
+      {{ ceph_cmd }} orch apply mds {{ ceph_cephfs.fs_name }}
+      --placement=count:{{ ceph_cephfs.mds_count }}
+  when: "'mds.' ~ ceph_cephfs.fs_name not in ceph_cephfs_mds_ls.stdout"
+  changed_when: true
+
+- name: Wait for the CephFS rank to become active
+  ansible.builtin.command: "{{ ceph_cmd }} fs status {{ ceph_cephfs.fs_name }} -f json"
+  register: ceph_cephfs_status
+  until: >-
+    (ceph_cephfs_status.stdout | from_json).mdsmap
+    | selectattr('state', 'eq', 'active') | list | length >= 1
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Check existing subvolume groups
+  ansible.builtin.command: "{{ ceph_cmd }} fs subvolumegroup ls {{ ceph_cephfs.fs_name }} -f json"
+  register: ceph_cephfs_svg_list
+  changed_when: false
+
+- name: Create the CSI subvolume group
+  # ceph-csi dropped CreateSubVolumeGroup from internal/cephfs/core/volume.go,
+  # and the upstream exporter script that would otherwise create it is not
+  # used here. Without the group the first RWX PVC fails with
+  # "subvolume group 'csi' does not exist".
+  ansible.builtin.command:
+    cmd: >-
+      {{ ceph_cmd }} fs subvolumegroup create
+      {{ ceph_cephfs.fs_name }} {{ ceph_cephfs.subvolume_group }}
+  when: >-
+    ceph_cephfs.subvolume_group not in
+    (ceph_cephfs_svg_list.stdout | default('[]', true) | from_json
+     | map(attribute='name') | list)
+  changed_when: true
+
+- name: Create CephX credentials for the CephFS CSI provisioner
+  # Caps copied verbatim from the upstream external-cluster exporter. The
+  # "osd blocklist" command is quoted with double quotes because the command
+  # module shlex-splits the line and nested single quotes would not survive.
+  ansible.builtin.command:
+    cmd: >-
+      {{ ceph_cmd }} auth get-or-create {{ ceph_cephfs_provisioner_client }}
+      mon 'allow r, allow command "osd blocklist"'
+      mgr 'allow rw'
+      osd 'allow rw tag cephfs metadata=*'
+      mds 'allow *'
+      {{ '--key-type AES' if ceph_cephx_aes128_compat | bool else '' }}
+  register: ceph_cephfs_prov_key
+  changed_when: false
+  no_log: true
+
+- name: Create CephX credentials for the CephFS CSI node plugin
+  ansible.builtin.command:
+    cmd: >-
+      {{ ceph_cmd }} auth get-or-create {{ ceph_cephfs_node_client }}
+      mon 'allow r, allow command "osd blocklist"'
+      mgr 'allow rw'
+      osd 'allow rw tag cephfs *=*'
+      mds 'allow rw'
+      {{ '--key-type AES' if ceph_cephx_aes128_compat | bool else '' }}
+  register: ceph_cephfs_node_key
+  changed_when: false
+  no_log: true
+
+- name: Re-key CephFS CephX credentials to AES-128
+  # Same reason as client.openshift in osd.yml: get-or-create returns an
+  # existing key untouched, and ODF's bundled client cannot parse AES-256.
+  # AES-128 keys are "AQ..." in base64, AES-256 "Ag...".
+  ansible.builtin.command:
+    cmd: "{{ ceph_cmd }} auth rotate {{ item.client }} --key-type AES"
+  loop:
+    - client: "{{ ceph_cephfs_provisioner_client }}"
+      key: "{{ ceph_cephfs_prov_key.stdout }}"
+    - client: "{{ ceph_cephfs_node_client }}"
+      key: "{{ ceph_cephfs_node_key.stdout }}"
+  loop_control:
+    label: "{{ item.client }}"
+  when:
+    - ceph_cephx_aes128_compat | bool
+    - not (item.key | regex_search('key = (\\S+)', '\\1') | first).startswith('AQ')
+  changed_when: true
+  no_log: true
+
+- name: Wait for Ceph to return to HEALTH_OK
+  # The pre-shutdown gate refuses to run unless health is exactly HEALTH_OK,
+  # so a filesystem that never settles must fail here, not three stages later.
+  ansible.builtin.command: "{{ ceph_cmd }} health"
+  register: ceph_cephfs_health
+  until: ceph_cephfs_health.stdout | trim == 'HEALTH_OK'
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Display CephFS details
+  ansible.builtin.debug:
+    msg:
+      - "=== CephFS for ODF RWX volumes ==="
+      - "Filesystem: {{ ceph_cephfs.fs_name }}"
+      - "Pools: {{ ceph_cephfs.metadata_pool }} (metadata), {{ ceph_cephfs.data_pool }} (data)"
+      - "Subvolume group: {{ ceph_cephfs.subvolume_group }}"
+      - "CSI clients: {{ ceph_cephfs_provisioner_client }}, {{ ceph_cephfs_node_client }}"

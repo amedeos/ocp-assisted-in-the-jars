@@ -56,6 +56,39 @@ stringData:
           "pool": "{{ ceph_config.pool_name }}"
         }
       },
+{# Never add parameters to the ceph-rbd entry above: ocs-operator compares
+   sc.Parameters and DELETES AND RECREATES the StorageClass when they differ,
+   which drops the hand-applied is-default-class annotation and breaks the
+   NooBaa DB PVC along with every PVC that relies on the default class. #}
+{% if enable_cephfs | bool %}
+      {
+        "name": "rook-csi-cephfs-provisioner",
+        "kind": "Secret",
+        "data": {
+          "userID": "{{ odf_cephfs_provisioner_client | regex_replace('^client\.', '') }}",
+          "userKey": "{{ odf_cephfs_provisioner_key }}"
+        }
+      },
+      {
+        "name": "rook-csi-cephfs-node",
+        "kind": "Secret",
+        "data": {
+          "userID": "{{ odf_cephfs_node_client | regex_replace('^client\.', '') }}",
+          "userKey": "{{ odf_cephfs_node_key }}"
+        }
+      },
+      {
+        "name": "cephfs",
+        "kind": "StorageClass",
+        "data": {
+          "fsName": "{{ ceph_cephfs.fs_name }}",
+          "pool": "{{ ceph_cephfs.data_pool }}",
+          "csi.storage.k8s.io/provisioner-secret-name": "rook-csi-cephfs-provisioner",
+          "csi.storage.k8s.io/controller-expand-secret-name": "rook-csi-cephfs-provisioner",
+          "csi.storage.k8s.io/node-stage-secret-name": "rook-csi-cephfs-node"
+        }
+      },
+{% endif %}
       {
         "name": "monitoring-endpoint",
         "kind": "CephCluster",

@@ -11,7 +11,8 @@ external storage for OpenShift Data Foundation (ODF).
 
 VMs created:
 - **utility** (RHEL 10) -- dnsmasq for DNS+DHCP
-- **ceph** (RHEL 10) -- single-node Ceph via cephadm, 3 OSDs
+- **ceph** (RHEL 10) -- single-node Ceph via cephadm, 3 OSDs, plus a
+  CephFS filesystem and one MDS when `enable_cephfs` is set (default)
 - **control-plane-0/1/2** -- empty VMs with DVD/cdrom, boot from
   Assisted Installer discovery ISO, CPU host-passthrough for
   OpenShift Virtualization
@@ -56,10 +57,12 @@ explicitly via `make prepare-network`.
 3. **03** -- download and customize RHEL 10 golden images
 4. **04** -- create libvirt VMs (utility, ceph, 3 control-planes)
 5. **05** -- configure dnsmasq on utility VM
-6. **06** -- bootstrap single-node Ceph with 3 OSDs
+6. **06** -- bootstrap single-node Ceph with 3 OSDs (plus CephFS and
+   the MDS unless `enable_cephfs` is false)
 7. **07** -- boot control-planes from discovery ISO
 8. **08** -- post-install (oc client, kubeconfig)
-9. **09** -- configure ODF with external Ceph
+9. **09** -- configure ODF with external Ceph (plus the CephFS RWX
+   StorageClass unless `enable_cephfs` is false)
 10. **10** -- configure HTPasswd identity provider
 11. **10b** -- configure valid SSL certs via Let's Encrypt
     (DNS-01 over DuckDNS); skipped unless `enable_letsencrypt`
@@ -107,6 +110,42 @@ consequences, both handled in the `ceph` role:
 
 Drop both once the el10 tools repo and ODF ship clients that keep pace
 with the image.
+
+### CephFS / RWX StorageClass
+
+`enable_cephfs` (default true) adds a CephFS filesystem on the ceph VM
+(`roles/ceph/tasks/cephfs.yml`) and the matching entries in the ODF
+external-cluster secret (`roles/odf/templates/ceph-connection.yml.j2`),
+yielding `ocs-external-storagecluster-cephfs`. RBD stays the default
+StorageClass; NooBaa/OBC are untouched.
+
+This repo hand-writes the secret that upstream generates with
+`ceph-external-cluster-details-exporter.py`, so four non-obvious parts of
+that contract have to be reproduced by hand. All four are silent
+failures -- nothing errors at apply time:
+
+- **`userID` / `userKey`, not `adminID` / `adminKey`.** ceph-csi accepts
+  the latter only as a deprecated fallback.
+- **Never run `osd pool application enable <pool> cephfs`.** The CSI osd
+  caps match on `tag cephfs metadata=<fs>`, and only `ceph fs new`
+  writes that key/value pair. A bare application enable leaves the tag
+  empty and the provisioner is denied.
+- **Never add or change parameters on the `ceph-rbd` entry.**
+  ocs-operator compares `sc.Parameters` and *deletes and recreates* the
+  StorageClass when they differ, dropping the hand-applied
+  `is-default-class` annotation -- which breaks the NooBaa DB PVC and
+  every PVC relying on the default class.
+- **ocs-operator does not watch the secret.** Its `Owns(&corev1.Secret{})`
+  is filtered by `GenerationChangedPredicate` and Secrets have no
+  generation, so a changed secret alone takes effect only at the 10h
+  resync. The odf role bumps an annotation on the StorageCluster to force
+  a reconcile.
+
+Two more single-host consequences: new cephx users must be created with
+`--key-type AES` (same skew as above), and the filesystem runs a single
+MDS with `standby_count_wanted 0` -- otherwise `MDS_INSUFFICIENT_STANDBY`
+pins the cluster at HEALTH_WARN and `make shutdown`, which demands exactly
+`HEALTH_OK`, refuses to run.
 
 ### Node definitions
 

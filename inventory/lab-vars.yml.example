@@ -25,6 +25,15 @@
 # letsencrypt_email: "you@example.com"
 # letsencrypt_staging: true
 
+# CephFS-backed RWX StorageClass (ocs-external-storagecluster-cephfs).
+# Enabled by default; uncomment to skip the filesystem and its MDS, e.g. to
+# keep the ceph VM's memory and PG budget for RBD only. RBD remains the
+# default StorageClass either way.
+# enable_cephfs: false
+# Provision and delete a ReadWriteMany PVC at the end of the odf stage to
+# prove the CSI caps and the subvolume group actually work.
+# odf_cephfs_smoke_test: true
+
 # VM placement -- the 'hypervisor' field must match a host under 'hypervisors'
 # in your custom inventory file.
 cluster_nodes:
