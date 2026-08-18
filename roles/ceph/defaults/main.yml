@@ -12,12 +12,14 @@ ceph_client_name: client.openshift
 ceph_cephfs_provisioner_client: client.csi-cephfs-provisioner
 ceph_cephfs_node_client: client.csi-cephfs-node
 
-# Issue the cephx keys ODF consumes (client.admin, client.openshift) with the
-# AES-128 cipher instead of the AES-256 the current rhceph-9 image defaults to.
-# ODF's bundled Ceph client is an older build that cannot parse AES-256 keys,
-# which leaves the StorageCluster stuck in phase Error. See cephx_compat.yml
-# for the full rationale and the security trade-off. Set to false once ODF
-# ships a client that keeps pace with the container image.
+# Make the cluster mint AES-128 cephx keys instead of the AES-256 the current
+# rhceph-9 image defaults to. ODF's bundled Ceph client is an older build that
+# cannot parse AES-256 keys: the StorageCluster gets stuck in phase Error, or
+# reaches Ready while every RBD PVC stays Pending. This applies cluster-wide,
+# not just to the entities this role creates, because rook mints its own CSI
+# users in external mode. See cephx_compat.yml for the full rationale and the
+# security trade-off. Set to false once ODF ships a client that keeps pace
+# with the container image.
 ceph_cephx_aes128_compat: true
 
 # BlueStore slow-ops alerting. On the lab's virtual (qcow2) OSD disks a

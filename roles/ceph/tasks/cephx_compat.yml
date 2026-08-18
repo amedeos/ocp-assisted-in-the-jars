@@ -6,19 +6,37 @@
 # cluster issues AES-256 cephx keys (type 2, base64 "Ag..."), which the older
 # client cannot parse: it fails with "Malformed input [buffer:3]" and rook
 # never gets past "failed get-or-create-key client.ceph-exporter", leaving the
-# StorageCluster stuck in phase Error.
+# StorageCluster stuck in phase Error. Older ODF is worse, not better: 4.18
+# carries ceph-csi 19.2.1 (squid) and 4.16 is older still, so no version this
+# repo targets can read an AES-256 key.
 #
-# The monmap of the new image allows only the aes256k cipher. Allowing the
-# older aes cipher as well lets the two entities that leave the cluster --
-# client.admin and client.openshift, both consumed by ODF -- carry AES-128
-# keys, which is what every deploy before the rebuild already used. The
-# mon/mgr/osd daemon keys stay AES-256 and keep talking to their own -324
-# daemons, so aes256k must remain in the list.
+# The monmap of the new image allows only the aes256k cipher, and prefers it
+# for every key it mints, so two settings are needed:
 #
-# This knowingly downgrades those two keys to a cipher the new build labels
-# insecure. It is the trade-off for tracking a moving :latest tag rather than
-# pinning the image and freezing Ceph updates. Set ceph_cephx_aes128_compat to
-# false to drop the workaround once ODF ships a client that reads AES-256.
+#   auth_allowed_ciphers   aes256k,aes   permits AES-128 keys to exist
+#   auth_preferred_cipher  aes           makes newly minted keys AES-128
+#
+# The preferred cipher has to be changed cluster-wide rather than passing
+# --key-type AES to each get-or-create, because not every consumer is ours to
+# call. In external mode the rook operator connects with the client.admin key
+# it is handed and creates its own users -- client.csi-rbd-provisioner,
+# client.csi-rbd-node, client.ceph-exporter -- with a plain get-or-create. Any
+# of those born AES-256 makes ceph-csi fail every CreateVolume with
+# "rados: ret=-22, Invalid argument", leaving every RBD PVC Pending while the
+# StorageCluster still reports Ready. The list grows with each rook version,
+# so it cannot be enumerated here.
+#
+# Both ciphers must stay in auth_allowed_ciphers: daemon keys minted before
+# this change are AES-256, the ones minted after are AES-128, and mon/mgr/osd
+# have to keep talking to their own -324 daemons either way.
+#
+# This knowingly downgrades the whole cluster to a cipher the new build labels
+# insecure -- including future daemon keys, which previously stayed AES-256.
+# It is the trade-off for tracking a moving :latest tag rather than pinning
+# the image and freezing Ceph updates, and it is accepted deliberately for a
+# lab. Set ceph_cephx_aes128_compat to false to drop the workaround once ODF
+# ships a client that reads AES-256 -- that only affects fresh deploys, it
+# does not roll an existing cluster back.
 
 - name: Get monmap auth cipher configuration
   ansible.builtin.command: "{{ ceph_cmd }} mon dump -f json"
@@ -42,6 +60,21 @@
   # "creating key with insecure key type (aes) not allowed"
   ansible.builtin.command: "{{ ceph_cmd }} config set mon mon_auth_allow_insecure_key true"
   when: ceph_compat_insecure_key.stdout | trim | lower != 'true'
+  changed_when: true
+
+- name: Get the monmap preferred auth cipher
+  # Re-dumped rather than reusing ceph_compat_monmap from the top of the file:
+  # the allowed-ciphers task above may have rewritten the monmap since.
+  ansible.builtin.command: "{{ ceph_cmd }} mon dump -f json"
+  register: ceph_compat_preferred
+  changed_when: false
+
+- name: Prefer AES-128 for every newly created key
+  # Covers the entities rook creates for itself, which never see the
+  # --key-type AES that osd.yml and cephfs.yml pass explicitly.
+  ansible.builtin.command: "{{ ceph_cmd }} mon set auth_preferred_cipher aes"
+  when: >-
+    (ceph_compat_preferred.stdout | from_json).auth_preferred_cipher.name != 'aes'
   changed_when: true
 
 - name: Get current client.admin key

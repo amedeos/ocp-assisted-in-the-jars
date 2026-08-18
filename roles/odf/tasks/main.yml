@@ -270,6 +270,50 @@
     - enable_cephfs | bool
     - odf_cephfs_smoke_test | bool
 
+- name: Wait for the NooBaa system to be ready
+  # The StorageCluster reaches Ready as soon as the external CephCluster
+  # connects, which says nothing about provisioning: a cluster whose RBD CSI
+  # credentials are unusable sits at Ready with every PVC Pending. NooBaa is
+  # the only stock consumer of the default RBD StorageClass, so waiting on it
+  # doubles as an end-to-end check and needs no PVC of its own. It has to come
+  # after the default-class annotation above, which is how its DB PVC resolves.
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ odf_kubeconfig_path }}
+      get noobaa {{ odf_noobaa_name }}
+      -n {{ odf_namespace }}
+      -o jsonpath='{.status.phase}'
+  register: odf_noobaa_phase
+  until: odf_noobaa_phase.stdout == 'Ready'
+  retries: 60
+  delay: 15
+  changed_when: false
+  failed_when: false
+
+- name: Collect PVCs that never bound
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ odf_kubeconfig_path }}
+      get pvc -n {{ odf_namespace }}
+      -o jsonpath='{range .items[?(@.status.phase!="Bound")]}{.metadata.name}={.status.phase} {end}'
+  register: odf_unbound_pvcs
+  changed_when: false
+  failed_when: false
+  when: odf_noobaa_phase.stdout | default('') != 'Ready'
+
+- name: Fail if the NooBaa system never became ready
+  ansible.builtin.fail:
+    msg: >-
+      NooBaa is in phase "{{ odf_noobaa_phase.stdout | default('') | default('unknown', true) }}".
+      Unbound PVCs in {{ odf_namespace }}:
+      {{ odf_unbound_pvcs.stdout | default('') | trim | default('none', true) }}.
+      A Pending db-noobaa-db-pg-0 means RBD provisioning is failing. Read
+      `oc logs -n {{ odf_namespace }} -l app=csi-rbdplugin-provisioner
+      -c csi-rbdplugin`: "rados: ret=-22, Invalid argument" means the cephx
+      keys in the rook-csi-rbd-provisioner and rook-csi-rbd-node secrets are
+      AES-256 and ODF cannot parse them. See cephx_compat.yml in the ceph role.
+  when: odf_noobaa_phase.stdout | default('') != 'Ready'
+
 - name: Display StorageClasses
   ansible.builtin.command:
     cmd: "oc --kubeconfig {{ odf_kubeconfig_path }} get sc"
