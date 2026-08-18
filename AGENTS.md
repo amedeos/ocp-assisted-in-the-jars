@@ -62,7 +62,8 @@ explicitly via `make prepare-network`.
 7. **07** -- boot control-planes from discovery ISO
 8. **08** -- post-install (oc client, kubeconfig)
 9. **09** -- configure ODF with external Ceph (plus the CephFS RWX
-   StorageClass unless `enable_cephfs` is false)
+   StorageClass unless `enable_cephfs` is false), ending on a NooBaa
+   readiness gate that proves RBD provisioning works
 10. **10** -- configure HTPasswd identity provider
 11. **10b** -- configure valid SSL certs via Let's Encrypt
     (DNS-01 over DuckDNS); skipped unless `enable_letsencrypt`
@@ -99,17 +100,47 @@ To override (e.g., ODF 4.22 not yet released), set
 `registry.redhat.io/rhceph/rhceph-9-rhel9:latest`, which moves ahead of
 both the RHEL 10 `ceph-common` RPM and the Ceph client bundled in ODF.
 Since the 2026-07-20 image rebuild the cluster issues AES-256 cephx
-keys that those older clients cannot parse (`Malformed input`). Two
-consequences, both handled in the `ceph` role:
+keys that those older clients cannot parse (`Malformed input`). Older
+ODF is worse, not better: 4.18 ships ceph-csi 19.2.1 and 4.16 is older
+still, so no version this repo targets reads AES-256. Two consequences,
+both handled in the `ceph` role:
 
 - Cluster commands run as `{{ ceph_cmd }}` (`cephadm shell -- ceph`),
   never the host `ceph` binary. See `ceph_cmd` in `group_vars`.
-- `cephx_compat.yml` allows the older AES-128 cipher in the monmap and
-  re-keys the two entities ODF consumes (`client.admin`,
-  `client.openshift`). Toggle with `ceph_cephx_aes128_compat`.
+- `cephx_compat.yml` allows the AES-128 cipher in the monmap
+  (`auth_allowed_ciphers`) *and makes it the default for every newly
+  minted key* (`auth_preferred_cipher`). Toggle with
+  `ceph_cephx_aes128_compat`.
 
-Drop both once the el10 tools repo and ODF ship clients that keep pace
-with the image.
+The preferred-cipher half is not optional, and this is the non-obvious
+part: **in external mode rook does not use the credentials we hand it.**
+`rook-ceph-external-cluster-details` carries the real `client.admin`
+key, so the operator connects as admin and runs its own
+`auth get-or-create` for `client.csi-rbd-provisioner`,
+`client.csi-rbd-node` and `client.ceph-exporter`, overwriting the CSI
+secrets this repo wrote. That call passes no `--key-type`, so without a
+cluster-wide default those keys come out AES-256 and ceph-csi fails
+every `CreateVolume` with `rados: ret=-22, Invalid argument` -- leaving
+every RBD PVC `Pending` while the StorageCluster still reports `Ready`.
+
+Three things follow:
+
+- `client.openshift` (`ceph_client_name`) is currently vestigial. It is
+  still created and still written into the secret, so a future rook that
+  honours the supplied credentials keeps working, but nothing reads it
+  today. Do not use it to reason about which client is actually in use.
+- The CephFS users escape the problem only by accident:
+  `ceph_cephfs_provisioner_client` / `ceph_cephfs_node_client` already
+  carry the exact names rook asks for, so its get-or-create finds the
+  AES-128 keys `cephfs.yml` created. Do not rename them.
+- Key type is readable without decoding a whole key: AES-128 keys are
+  `AQ...` and 40 base64 characters, AES-256 keys `Ag...` and 60.
+
+The downgrade is cluster-wide, future daemon keys included. Drop it --
+along with the `--key-type AES` flags in `osd.yml` and `cephfs.yml` --
+once the el10 tools repo and ODF ship clients that keep pace with the
+image. Setting `ceph_cephx_aes128_compat: false` only affects fresh
+deploys; it does not roll an existing cluster back.
 
 ### CephFS / RWX StorageClass
 
@@ -146,6 +177,23 @@ Two more single-host consequences: new cephx users must be created with
 MDS with `standby_count_wanted 0` -- otherwise `MDS_INSUFFICIENT_STANDBY`
 pins the cluster at HEALTH_WARN and `make shutdown`, which demands exactly
 `HEALTH_OK`, refuses to run.
+
+### Verifying that ODF actually works
+
+`StorageCluster` reaching phase `Ready` only means the external
+CephCluster connected; it says nothing about provisioning. A cluster
+whose RBD CSI credentials are unusable sits at `Ready` indefinitely with
+every PVC `Pending`, and the deploy reports success.
+
+The `odf` role therefore ends by waiting for the `noobaa` CR to reach
+phase `Ready`. NooBaa is the only stock consumer of the default RBD
+StorageClass, so this is an end-to-end provisioning check that costs no
+extra PVC. On failure it lists the unbound PVCs and points at the CSI
+provisioner log. It is unconditional, unlike `odf_cephfs_smoke_test`,
+which is opt-in because it writes to the cluster.
+
+CephFS has no equivalent free consumer, hence that separate opt-in smoke
+test, which provisions an RWX PVC and deletes it again.
 
 ### Node definitions
 
