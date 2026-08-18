@@ -64,10 +64,17 @@
   gather_facts: false
   tasks:
     - name: Wait for Ceph to be healthy
+      # Match on the leading status word, not the whole line. `ceph health`
+      # prints a bare "HEALTH_OK" when the cluster is clean, but appends a
+      # summary otherwise ("HEALTH_WARN noout flag(s) set"), so an exact
+      # comparison against 'HEALTH_WARN' never matched: any real warning
+      # would retry for the full 10 minutes and then fail the play.
       ansible.builtin.command:
         cmd: "{{ ceph_cmd }} health"
       register: startup_ceph_health
-      until: startup_ceph_health.stdout | trim in ['HEALTH_OK', 'HEALTH_WARN']
+      until: >-
+        (startup_ceph_health.stdout | trim).startswith('HEALTH_OK') or
+        (startup_ceph_health.stdout | trim).startswith('HEALTH_WARN')
       retries: 60
       delay: 10
       changed_when: false
