@@ -428,7 +428,7 @@ oc import-image <name>:<tag> -n <ns> --confirm
 10. **07b-monitor-installation** -- waits for API VIP, restarts shut-off VMs without ISO, monitors kubeconfig/clusterversion/cluster operators
 11. **08-post-install** -- installs oc client, fetches kubeconfig on utility VM
 12. **09-configure-odf** -- deploys ODF operator with external Ceph storage, enables odf-console plugin, and (unless `enable_cephfs` is false) adds the CephFS RWX StorageClass
-13. **10-configure-htpasswd** -- configures HTPasswd identity provider (admin, reader, test01-03) with ClusterRoleBindings
+13. **10-configure-htpasswd** -- configures HTPasswd identity provider (admin, reader, test01-03) with ClusterRoleBindings; every user logs in once so it exists as a `User` object for later role bindings
 14. **10b-configure-letsencrypt** -- *optional* (skipped unless `enable_letsencrypt`): obtains a valid wildcard cert for `*.apps.<domain>` via Let's Encrypt DNS-01 over DuckDNS and applies it to the default IngressController
 15. **10c-configure-registries** -- *optional* (skipped unless `registry_auths` is set): merges extra registry credentials into the cluster-wide pull secret
 16. **11-print-hosts** -- prints the `/etc/hosts` entries needed to reach the console and API (hypervisor public IP in NAT+port-forwarding mode, VIPs in bridge mode)
