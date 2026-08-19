@@ -1,6 +1,14 @@
 ---
 htpasswd_idp_kubeconfig_path: /root/kubeconfig-int
 
+# Retries for the one-off login of every htpasswd user. The authentication
+# clusteroperator rolls out new oauth-openshift pods after the OAuth CR is
+# applied, and the clusteroperator wait in tasks/main.yml can pass on the
+# pre-rollout status, so the login has to cover the rollout on its own.
+htpasswd_idp_login_retries: 30
+htpasswd_idp_login_delay: 10
+htpasswd_idp_login_dir: /tmp/htpasswd-login-test.d
+
 htpasswd_idp_users:
   - name: admin
     password: "{{ htpasswd_admin_password }}"

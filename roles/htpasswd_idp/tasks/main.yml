@@ -86,36 +86,60 @@
   delay: 10
   changed_when: false
 
-- name: Test login with admin user
+- name: Create temporary login kubeconfig directory
+  ansible.builtin.file:
+    path: "{{ htpasswd_idp_login_dir }}"
+    state: directory
+    mode: "0700"
+
+# OpenShift materialises User and Identity objects on first login, so every
+# user has to log in once to be referenceable in later role bindings.
+# Each login writes its own kubeconfig: a shared one would leave the last
+# user as current-context and break the admin check below.
+- name: Log in once as each htpasswd user
   ansible.builtin.command:
     cmd: >-
       oc login https://api.{{ domain }}:6443
-      -u admin -p {{ htpasswd_admin_password }}
+      -u {{ item.name }} -p {{ item.password }}
       --insecure-skip-tls-verify=true
-      --kubeconfig /tmp/htpasswd-login-test
+      --kubeconfig {{ htpasswd_idp_login_dir }}/{{ item.name }}
+  loop: "{{ htpasswd_idp_users }}"
+  loop_control:
+    label: "{{ item.name }}"
   register: htpasswd_idp_login_test
   until: htpasswd_idp_login_test.rc == 0
-  retries: 12
-  delay: 10
+  retries: "{{ htpasswd_idp_login_retries }}"
+  delay: "{{ htpasswd_idp_login_delay }}"
   changed_when: false
   no_log: true
 
 - name: Verify admin user has cluster-admin privileges
   ansible.builtin.command:
     cmd: >-
-      oc --kubeconfig /tmp/htpasswd-login-test
+      oc --kubeconfig {{ htpasswd_idp_login_dir }}/admin
       auth can-i '*' '*' --all-namespaces
   register: htpasswd_idp_admin_check
   changed_when: false
+  failed_when: false
 
 - name: Fail if admin is not cluster-admin
   ansible.builtin.fail:
     msg: "Admin user does not have cluster-admin privileges."
-  when: htpasswd_idp_admin_check.stdout != 'yes'
+  when: htpasswd_idp_admin_check.stdout | trim != 'yes'
 
-- name: Remove temporary login kubeconfig
+- name: Verify every htpasswd user exists as a User object
+  ansible.builtin.command:
+    cmd: >-
+      oc --kubeconfig {{ htpasswd_idp_kubeconfig_path }}
+      get user {{ item.name }}
+  loop: "{{ htpasswd_idp_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+
+- name: Remove temporary login kubeconfig directory
   ansible.builtin.file:
-    path: /tmp/htpasswd-login-test
+    path: "{{ htpasswd_idp_login_dir }}"
     state: absent
 
 - name: Remove kubeadmin user
@@ -135,3 +159,4 @@
       - "  admin -> cluster-admin"
       - "  reader -> cluster-reader"
       - "  test01, test02, test03 -> no bindings"
+      - "All users logged in once and now appear in 'oc get users'."
