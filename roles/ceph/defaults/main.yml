@@ -40,3 +40,13 @@ ceph_bluestore_slow_ops_warn_lifetime: 3600
 _ceph_slow_ops_settings:
   bluestore_slow_ops_warn_threshold: "{{ ceph_bluestore_slow_ops_warn_threshold }}"
   bluestore_slow_ops_warn_lifetime: "{{ ceph_bluestore_slow_ops_warn_lifetime }}"
+
+# Health checks that the AES-128 downgrade above raises permanently, and that
+# cephx_compat.yml therefore mutes. They arrived with the rhceph-9 image
+# rebuild to 20.2.1-405 (9.1.2); on an image that predates them nothing is
+# raised and nothing is muted. There is no mon_warn_on_* option to switch
+# them off, so a sticky mute is the only lever.
+ceph_cephx_insecure_health_checks:
+  - AUTH_INSECURE_CLIENT_KEY_TYPE
+  - AUTH_INSECURE_KEYS_ALLOWED
+  - AUTH_INSECURE_KEYS_CREATABLE

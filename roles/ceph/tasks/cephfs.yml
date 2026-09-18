@@ -188,11 +188,16 @@
   no_log: true
 
 - name: Wait for Ceph to return to HEALTH_OK
-  # The pre-shutdown gate refuses to run unless health is exactly HEALTH_OK,
-  # so a filesystem that never settles must fail here, not three stages later.
+  # The pre-shutdown gate refuses to run unless health is HEALTH_OK, so a
+  # filesystem that never settles must fail here, not three stages later.
+  #
+  # Matched on the leading status word rather than the whole line: with the
+  # AES-128 compat workaround on, cephx_compat.yml mutes the three
+  # AUTH_INSECURE_* checks and a clean cluster then prints
+  # "HEALTH_OK (muted: AUTH_INSECURE_CLIENT_KEY_TYPE ...)".
   ansible.builtin.command: "{{ ceph_cmd }} health"
   register: ceph_cephfs_health
-  until: ceph_cephfs_health.stdout | trim == 'HEALTH_OK'
+  until: (ceph_cephfs_health.stdout | trim).startswith('HEALTH_OK')
   retries: 30
   delay: 10
   changed_when: false
