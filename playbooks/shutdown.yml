@@ -48,6 +48,9 @@
   gather_facts: false
   tasks:
     - name: Check Ceph health is HEALTH_OK
+      # Compared on the leading status word: a cluster running the AES-128
+      # cephx compat workaround reports "HEALTH_OK (muted: ...)" for the
+      # AUTH_INSECURE_* checks that cephx_compat.yml mutes on purpose.
       ansible.builtin.command:
         cmd: "{{ ceph_cmd }} health"
       register: shutdown_ceph_health
@@ -66,7 +69,7 @@
           Resolve Ceph health issues before shutting down the cluster.
       when: >-
         not (hostvars[groups['hypervisors'][0]].shutdown_all_off | default(false) | bool) and
-        shutdown_ceph_health.stdout | trim != 'HEALTH_OK'
+        not (shutdown_ceph_health.stdout | trim).startswith('HEALTH_OK')
 
 - name: Pre-shutdown OpenShift health checks
   hosts: utility_vms

@@ -215,8 +215,14 @@ The defaults (32 PGs per pool) keep the three OSDs well under
 standby and `standby_count_wanted` is set to `0`. Without that the
 cluster would sit permanently in `HEALTH_WARN`
 (`MDS_INSUFFICIENT_STANDBY`), and `make shutdown` refuses to run unless
-Ceph reports exactly `HEALTH_OK`. A second, colocated MDS would only
+Ceph reports `HEALTH_OK`. A second, colocated MDS would only
 double MDS memory on a 16 GB VM without buying real redundancy.
+
+The same gate is why the deploy mutes the three `AUTH_INSECURE_*` health
+checks the AES-128 cephx workaround raises -- see
+`roles/ceph/tasks/cephx_compat.yml`. A healthy cluster therefore reports
+`HEALTH_OK (muted: ...)` rather than a bare `HEALTH_OK`, and every gate
+matches on the leading status word.
 
 To verify RWX end-to-end, set `odf_cephfs_smoke_test: true`: the odf role
 provisions a `ReadWriteMany` PVC, waits for it to bind and deletes it

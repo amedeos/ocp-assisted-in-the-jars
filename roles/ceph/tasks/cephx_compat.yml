@@ -113,3 +113,49 @@
         - /etc/ceph/ceph.client.admin.keyring
         - "/var/lib/ceph/{{ ceph_compat_fsid.stdout | trim }}/config/ceph.client.admin.keyring"
       no_log: true
+
+# Everything above is what makes the cluster usable; what follows is what
+# makes it *look* healthy again. Since the 20.2.1-405 (9.1.2) image the mon
+# raises three checks over precisely the state this file creates -- insecure
+# cipher allowed, insecure key creation allowed, and one entry per client
+# holding an AES-128 key. They are permanent by construction, there is no
+# mon_warn_on_* option to switch them off, and they would pin the cluster at
+# HEALTH_WARN: the CephFS gate in cephfs.yml and the pre-shutdown gate in
+# playbooks/shutdown.yml both refuse anything but HEALTH_OK, so `make deploy`
+# and `make shutdown` would never pass again. Mute them, and let both gates
+# match on the leading status word -- a muted cluster reports
+# "HEALTH_OK (muted: AUTH_INSECURE_CLIENT_KEY_TYPE ...)".
+
+- name: Wait for the insecure-key health checks to be raised
+  # Deliberately fatal: with the compat workaround on, this image raises all
+  # three within seconds of the settings above. A timeout means the mon did
+  # not take the downgrade, which is worth failing over here rather than
+  # three stages later. An image predating these checks never raises them --
+  # set ceph_cephx_insecure_health_checks to [] for that case.
+  ansible.builtin.command: "{{ ceph_cmd }} health -f json"
+  register: ceph_compat_health
+  until: >-
+    ceph_cephx_insecure_health_checks
+    | difference((ceph_compat_health.stdout | from_json).checks.keys() | list)
+    | length == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+
+- name: Mute the insecure-key health warnings
+  # --sticky is not optional. A plain mute is cleared automatically as soon as
+  # the check gets worse, and AUTH_INSECURE_CLIENT_KEY_TYPE counts entities:
+  # rook mints client.csi-rbd-provisioner, client.csi-rbd-node and
+  # client.ceph-exporter of its own in stage 09, taking the count from 4 to 7
+  # and un-muting the check right after the deploy declared success.
+  #
+  # The loop skips codes that already carry a sticky mute, so a re-run is a
+  # no-op; a mute that lost its stickiness is re-applied.
+  ansible.builtin.command: "{{ ceph_cmd }} health mute {{ item }} --sticky"
+  loop: >-
+    {{ ceph_cephx_insecure_health_checks
+       | intersect((ceph_compat_health.stdout | from_json).checks.keys() | list)
+       | difference((ceph_compat_health.stdout | from_json).mutes | default([])
+                    | selectattr('sticky', 'defined') | selectattr('sticky')
+                    | map(attribute='code') | list) }}
+  changed_when: true

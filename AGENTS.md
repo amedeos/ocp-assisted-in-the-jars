@@ -136,6 +136,28 @@ Three things follow:
 - Key type is readable without decoding a whole key: AES-128 keys are
   `AQ...` and 40 base64 characters, AES-256 keys `Ag...` and 60.
 
+Since the image moved to `20.2.1-405` (9.1.2) the mon also raises three
+health checks over exactly the state this workaround creates:
+`AUTH_INSECURE_KEYS_ALLOWED`, `AUTH_INSECURE_KEYS_CREATABLE` and
+`AUTH_INSECURE_CLIENT_KEY_TYPE` (one count per client holding an AES-128
+key). They are permanent by construction and there is no `mon_warn_on_*`
+option for them, so `cephx_compat.yml` mutes them, `--sticky` and without
+a TTL. Two consequences:
+
+- A healthy cluster prints `HEALTH_OK (muted: AUTH_INSECURE_...)`, not a
+  bare `HEALTH_OK`. Every gate -- `cephfs.yml`, `playbooks/shutdown.yml`,
+  `playbooks/startup.yml` -- matches the leading status word, never the
+  whole line.
+- `--sticky` is load-bearing. A plain mute is cleared as soon as the
+  check gets worse, and `AUTH_INSECURE_CLIENT_KEY_TYPE` counts entities:
+  rook mints three CSI/exporter users of its own in stage 09, taking the
+  count from 4 to 7 and un-muting the check just after the deploy
+  reported success.
+
+The mute list is `ceph_cephx_insecure_health_checks`; empty it for an
+image that predates these checks, since the wait for them to be raised is
+deliberately fatal.
+
 The downgrade is cluster-wide, future daemon keys included. Drop it --
 along with the `--key-type AES` flags in `osd.yml` and `cephfs.yml` --
 once the el10 tools repo and ODF ship clients that keep pace with the
@@ -175,7 +197,7 @@ failures -- nothing errors at apply time:
 Two more single-host consequences: new cephx users must be created with
 `--key-type AES` (same skew as above), and the filesystem runs a single
 MDS with `standby_count_wanted 0` -- otherwise `MDS_INSUFFICIENT_STANDBY`
-pins the cluster at HEALTH_WARN and `make shutdown`, which demands exactly
+pins the cluster at HEALTH_WARN and `make shutdown`, which demands
 `HEALTH_OK`, refuses to run.
 
 ### Verifying that ODF actually works
